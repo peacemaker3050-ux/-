@@ -1,9 +1,11 @@
 <!DOCTYPE html>
-<html lang="en" dir="ltr">
+<html lang="ar" dir="ltr">
 <head>
     <meta charset="UTF-8">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>University Library Bot</title>
+    <title>University Library Bot (Full Data)</title>
+    
     <style>
         /* === Reset & Basic Settings === */
         html, body {
@@ -34,11 +36,9 @@
             --file-dummy-text: #ff8888;
             --menu-bg: #1d2938;
             --modal-bg: rgba(0, 0, 0, 0.85);
-            --danger-color: #ff4444;
-            --success-color: #00c851;
         }
 
-        * { box-sizing: border-box; }
+        * { box-sizing: border-box; outline: none; }
 
         /* === Main Container === */
         .app-container {
@@ -61,232 +61,122 @@
             align-items: center;
             justify-content: space-between;
             border-bottom: 1px solid #000;
-            z-index: 20; 
-            flex-shrink: 0; 
+            z-index: 20; flex-shrink: 0; user-select: none;
         }
 
         .header-info { display: flex; align-items: center; gap: 12px; cursor: pointer; }
         
         .bot-avatar {
-            width: 42px; height: 42px; 
-            border-radius: 50%;
+            width: 42px; height: 42px; border-radius: 50%;
             background-color: var(--accent-color);
             display: flex; justify-content: center; align-items: center;
-            font-size: 22px;
-            flex-shrink: 0;
-            background-size: cover;
-            background-position: center;
-            background-repeat: no-repeat;
-            border: 2px solid transparent;
-            transition: transform 0.2s;
-        }
-        
-        .header-info:active .bot-avatar { transform: scale(0.95); }
-
-        .bot-name h2 { 
-            font-size: 16px; margin: 0; font-weight: 600; line-height: 1.2; 
-        }
-        .bot-status { 
-            font-size: 13px; color: var(--text-secondary); margin-top: 2px; display: block; 
+            font-size: 22px; flex-shrink: 0;
+            background-size: cover; background-position: center;
+            background-repeat: no-repeat; border: 2px solid transparent; color: #fff;
         }
 
-        .header-actions { 
-            color: var(--accent-color); 
-            font-size: 24px; 
-            padding: 5px 10px; 
-            cursor: pointer; 
-            user-select: none;
-            transition: opacity 0.2s;
-        }
-        .header-actions:active { opacity: 0.7; }
+        .bot-name h2 { font-size: 16px; margin: 0; font-weight: 600; line-height: 1.2; }
+        .bot-status { font-size: 13px; color: var(--text-secondary); margin-top: 2px; display: block; }
+
+        .header-actions { color: var(--text-secondary); font-size: 28px; line-height: 1; padding: 5px 10px; cursor: pointer; user-select: none; }
+        .header-actions:hover { color: #fff; }
 
         /* === Options Menu (Dropdown) === */
         .menu-dropdown {
-            position: absolute;
-            top: 55px;
-            right: 10px;
-            width: 220px;
-            background-color: var(--menu-bg);
-            border: 1px solid #000;
-            border-radius: 8px;
+            position: absolute; top: 60px; right: 10px;
+            width: 220px; background-color: var(--menu-bg);
+            border: 1px solid #000; border-radius: 8px;
             box-shadow: 0 5px 15px rgba(0,0,0,0.5);
-            display: none;
-            flex-direction: column;
-            z-index: 100;
-            overflow: hidden;
-            transform-origin: top right;
-            animation: menuFadeIn 0.2s ease-out;
+            display: none; flex-direction: column; z-index: 100;
+            overflow: hidden; animation: fadeIn 0.2s ease;
         }
-
-        @keyframes menuFadeIn {
-            from { opacity: 0; transform: scale(0.9); }
-            to { opacity: 1; transform: scale(1); }
-        }
-
         .menu-dropdown.active { display: flex; }
-
-        .menu-item {
-            padding: 12px 15px;
-            cursor: pointer;
-            color: #fff;
-            font-size: 14px;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            transition: background 0.2s;
-        }
-
+        .menu-item { padding: 12px 15px; cursor: pointer; color: #fff; font-size: 14px; display: flex; align-items: center; gap: 10px; transition: background 0.2s; border-bottom: 1px solid rgba(255,255,255,0.05); }
+        .menu-item:last-child { border-bottom: none; }
         .menu-item:hover { background-color: rgba(255,255,255,0.1); }
         .menu-item.danger { color: #ff6b6b; }
         .menu-item.admin { color: #4dabf7; font-weight: bold; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
 
         /* === Admin Modal === */
         .admin-modal {
-            position: absolute;
-            top: 0; left: 0; width: 100%; height: 100%;
-            background-color: var(--modal-bg);
-            backdrop-filter: blur(5px);
-            z-index: 200;
-            display: none;
-            flex-direction: column;
-            padding: 20px;
-            overflow-y: auto;
-            animation: slideUp 0.3s ease-out;
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background-color: var(--modal-bg); backdrop-filter: blur(5px);
+            z-index: 200; display: none; flex-direction: column;
+            padding: 20px; overflow-y: auto;
         }
-        
-        @keyframes slideUp {
-            from { transform: translateY(100%); }
-            to { transform: translateY(0); }
-        }
-
-        .admin-modal.active { display: flex; }
-
-        .modal-header {
-            display: flex; justify-content: space-between; align-items: center;
-            margin-bottom: 20px; padding-bottom: 10px; border-bottom: 1px solid #333;
-        }
+        .admin-modal.active { display: flex; animation: slideUp 0.3s ease; }
+        @keyframes slideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+        .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; padding-bottom: 10px; border-bottom: 1px solid #333; }
         .modal-title { font-size: 18px; font-weight: bold; color: #fff; }
-        .close-modal { font-size: 24px; color: #fff; cursor: pointer; padding: 5px; }
-
+        .close-modal { font-size: 28px; color: #ccc; cursor: pointer; line-height: 1; }
+        .close-modal:hover { color: #fff; }
         .form-group { margin-bottom: 15px; }
-        .form-label { display: block; margin-bottom: 5px; color: var(--text-secondary); font-size: 14px; }
+        .form-label { display: block; margin-bottom: 6px; color: var(--text-secondary); font-size: 13px; }
         .form-input, .form-textarea {
-            width: 100%; padding: 10px;
-            background: rgba(255,255,255,0.1); border: 1px solid #444;
-            border-radius: 6px; color: #fff; outline: none;
-            font-family: inherit; transition: border-color 0.2s;
+            width: 100%; padding: 10px; background: rgba(255,255,255,0.08); border: 1px solid #444;
+            border-radius: 6px; color: #fff; outline: none; font-family: inherit; transition: border 0.2s;
         }
         .form-textarea { height: 60px; resize: vertical; }
-        .form-input:focus { border-color: var(--accent-color); }
-
+        .form-input:focus, .form-textarea:focus { border-color: var(--accent-color); background: rgba(255,255,255,0.12); }
         .admin-section-title {
-            color: var(--accent-color); margin-top: 25px; margin-bottom: 10px;
-            font-size: 16px; border-bottom: 1px solid #333; padding-bottom: 5px;
+            color: var(--accent-color); margin-top: 25px; margin-bottom: 12px;
+            font-size: 15px; border-bottom: 1px solid #333; padding-bottom: 5px;
+            text-transform: uppercase; letter-spacing: 0.5px;
         }
-
         .btn-save {
-            width: 100%; padding: 12px;
-            background-color: var(--accent-color);
+            width: 100%; padding: 12px; background-color: var(--accent-color);
             color: #fff; border: none; border-radius: 6px;
             font-size: 16px; font-weight: bold; cursor: pointer;
             margin-top: 20px; transition: background 0.2s;
         }
-        .btn-save:active { transform: scale(0.98); }
         .btn-save:hover { background-color: #267fd3; }
-
-        .admin-list { margin-top: 20px; }
+        .btn-save:active { transform: scale(0.98); }
+        .admin-list { margin-top: 15px; }
         .admin-item {
-            background: rgba(255,255,255,0.05);
-            padding: 10px; border-radius: 6px;
+            background: rgba(255,255,255,0.05); padding: 10px; border-radius: 6px;
             display: flex; justify-content: space-between; align-items: center;
-            margin-bottom: 8px;
+            margin-bottom: 8px; border: 1px solid rgba(255,255,255,0.05);
         }
         .admin-name { font-size: 14px; }
-        .btn-remove { 
-            background: var(--danger-color); color: #fff; border: none; 
-            padding: 4px 8px; border-radius: 4px; font-size: 12px; cursor: pointer; 
-        }
+        .btn-remove { background: #ff4444; color: #fff; border: none; padding: 4px 8px; border-radius: 4px; font-size: 12px; cursor: pointer; }
+        .btn-remove:hover { background: #cc0000; }
 
         /* === Chat Area === */
         #chat-area {
-            flex: 1; 
-            min-height: 0; 
-            padding: 15px;
-            overflow-y: auto; 
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
+            flex: 1; padding: 15px; overflow-y: auto; display: flex;
+            flex-direction: column; gap: 12px;
             background-color: var(--chat-bg);
             background-image: radial-gradient(rgba(255,255,255,0.03) 1px, transparent 1px);
-            background-size: 20px 20px;
-            scroll-behavior: smooth;
+            background-size: 20px 20px; scroll-behavior: smooth;
         }
-
-        #chat-area::-webkit-scrollbar { width: 6px; }
+        #chat-area::-webkit-scrollbar { width: 5px; }
         #chat-area::-webkit-scrollbar-track { background: transparent; }
         #chat-area::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 3px; }
 
         /* === Messages === */
         .message {
-            width: fit-content;
-            max-width: 85%; 
-            padding: 10px 14px;
-            border-radius: 12px;
-            position: relative;
-            font-size: 15px;
-            line-height: 1.4;
-            word-wrap: break-word;
-            word-break: break-word;
+            width: fit-content; max-width: 90%; padding: 10px 14px;
+            border-radius: 18px; position: relative; font-size: 15px;
+            line-height: 1.5; word-wrap: break-word;
             animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
             box-shadow: 0 1px 2px rgba(0,0,0,0.2);
         }
-
-        @keyframes popIn { 
-            from { opacity: 0; transform: scale(0.9) translateY(10px); } 
-            to { opacity: 1; transform: scale(1) translateY(0); } 
-        }
-
-        .msg-bot { 
-            align-self: flex-start; 
-            background-color: var(--msg-in); 
-            color: var(--text-primary); 
-            border-bottom-left-radius: 4px; 
-        } 
-        
-        .msg-user { 
-            align-self: flex-end; 
-            background-color: var(--msg-out); 
-            color: var(--text-primary); 
-            border-bottom-right-radius: 4px; 
-        } 
-
-        .msg-bot b { color: #fff; font-weight: 600; }
-
-        /* === Timestamp Position === */
-        .timestamp {
-            font-size: 11px; color: rgba(255,255,255,0.5);
-            text-align: right; 
-            display: block; 
-            margin-top: 4px; 
-            margin-bottom: 0;
-            float: none;
-            clear: both;
-            user-select: none;
-        }
+        @keyframes popIn { from { opacity: 0; transform: scale(0.9) translateY(10px); } to { opacity: 1; transform: scale(1) translateY(0); } }
+        .msg-bot { align-self: flex-start; background-color: var(--msg-in); color: var(--text-primary); border-bottom-left-radius: 4px; } 
+        .msg-user { align-self: flex-end; background-color: var(--msg-out); color: var(--text-primary); border-bottom-right-radius: 4px; } 
+        .msg-bot b { color: #fff; font-weight: 700; }
+        .timestamp { font-size: 10px; color: rgba(255,255,255,0.4); text-align: right; display: block; margin-top: 6px; margin-bottom: 0; float: none; clear: both; user-select: none; }
 
         /* === File Attachments === */
         .file-link-btn {
             display: flex; align-items: center; gap: 10px;
             background-color: rgba(0,0,0,0.2); padding: 10px;
-            border-radius: 8px; text-decoration: none; 
-            color: var(--accent-color);
+            border-radius: 8px; text-decoration: none; color: var(--accent-color);
             margin-top: 5px; border: 1px solid rgba(51, 144, 236, 0.3);
-            font-size: 14px; cursor: pointer;
-            transition: background 0.2s;
-            overflow-wrap: break-word;
+            font-size: 14px; cursor: pointer; transition: background 0.2s; overflow-wrap: break-word;
         }
-        .file-link-btn:hover { background-color: rgba(51, 144, 236, 0.1); }
-
+        .file-link-btn:hover { background-color: rgba(51, 144, 236, 0.15); }
         .file-link-dummy {
             display: flex; align-items: center; gap: 10px;
             background-color: var(--file-dummy-bg); padding: 10px;
@@ -296,167 +186,34 @@
         }
 
         /* === Typing Indicator === */
-        .typing-indicator { 
-            font-size: 12px; color: var(--text-secondary); 
-            margin-left: 15px; margin-bottom: 5px; 
-            display: none; font-style: italic; opacity: 0.8;
-            flex-shrink: 0;
-        } 
+        .typing-indicator { font-size: 12px; color: var(--text-secondary); margin-left: 15px; margin-bottom: 10px; display: none; font-style: italic; opacity: 0.8; flex-shrink: 0; } 
         .typing-indicator.active { display: block; }
 
         /* === Keyboard Area === */
         #keyboard-area {
-            background-color: var(--header-bg);
-            padding: 10px;
-            display: grid;
-            grid-template-columns: repeat(2, 1fr);
-            gap: 8px;
-            border-top: 1px solid #000;
-            min-height: 0; 
-            max-height: 40vh;
-            overflow-y: auto;
-            flex-shrink: 0;
+            background-color: var(--header-bg); padding: 10px;
+            display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px;
+            border-top: 1px solid #000; min-height: 0; max-height: 45vh;
+            overflow-y: auto; flex-shrink: 0;
+            padding-bottom: max(10px, env(safe-area-inset-bottom));
         }
-
         .keyboard-btn {
-            background-color: var(--btn-bg);
-            border: 1px solid var(--btn-border);
-            color: var(--text-primary);
-            padding: 11px 8px; 
-            border-radius: 8px;
-            cursor: pointer;
-            transition: all 0.15s ease;
-            font-size: 14px; 
-            user-select: none;
-            white-space: normal;
-            word-wrap: break-word;
-            word-break: break-word;
-            text-align: center;
-            line-height: 1.3; 
-            position: relative;
-            overflow: hidden; 
-            min-height: 48px; 
-            display: flex;
-            align-items: center;
-            justify-content: center;
+            background-color: var(--btn-bg); border: 1px solid var(--btn-border);
+            color: var(--text-primary); padding: 12px 8px; border-radius: 10px;
+            cursor: pointer; transition: all 0.15s ease; font-size: 14px;
+            user-select: none; white-space: normal; word-wrap: break-word;
+            word-break: break-word; text-align: center; line-height: 1.3;
+            position: relative; overflow: hidden; min-height: 50px;
+            display: flex; align-items: center; justify-content: center; font-weight: 500;
         }
-
         .keyboard-btn:hover { background-color: var(--btn-hover); }
-        .keyboard-btn:active { transform: scale(0.97); background-color: rgba(255,255,255,0.1); }
-
+        .keyboard-btn:active { transform: scale(0.96); background-color: rgba(255,255,255,0.15); }
         .keyboard-btn.back-btn {
-            grid-column: span 2;
-            background-color: rgba(0,0,0,0.3);
-            border-color: rgba(255,255,255,0.05);
-            color: var(--text-secondary);
+            grid-column: span 2; background-color: rgba(0,0,0,0.3);
+            border-color: rgba(255,255,255,0.05); color: var(--text-secondary); font-weight: bold;
         }
-
-        /* === FIX: Mobile Adjustments === */
-        @media (max-width: 480px) {
-            .keyboard-btn {
-                font-size: 13px; 
-                padding: 12px 6px; 
-                line-height: 1.4; 
-                min-height: 44px;
-            }
-        }
-        
-        @media (max-width: 350px) {
-            #keyboard-area { grid-template-columns: 1fr; }
-            .keyboard-btn.back-btn { grid-column: span 1; }
-        }
-
-        /* === NEW: Custom UI Components === */
-
-        /* Toast Notification */
-        .toast-container {
-            position: absolute;
-            top: 70px;
-            left: 50%;
-            transform: translateX(-50%);
-            z-index: 1000;
-            pointer-events: none;
-            width: 90%;
-            max-width: 300px;
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-        }
-
-        .toast {
-            background: rgba(30, 30, 30, 0.95);
-            color: white;
-            padding: 10px 15px;
-            border-radius: 50px;
-            text-align: center;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-            font-size: 14px;
-            animation: fadeDown 0.3s ease-out forwards;
-            border: 1px solid rgba(255,255,255,0.1);
-        }
-
-        .toast.success { border-left: 4px solid var(--success-color); }
-        .toast.error { border-left: 4px solid var(--danger-color); }
-
-        @keyframes fadeDown {
-            from { opacity: 0; transform: translateY(-20px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-        @keyframes fadeOut {
-            to { opacity: 0; transform: translateY(-10px); }
-        }
-
-        /* Custom Prompt Modal */
-        .custom-prompt-overlay {
-            position: fixed;
-            top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0,0,0,0.7);
-            z-index: 300;
-            display: none;
-            justify-content: center;
-            align-items: center;
-            backdrop-filter: blur(3px);
-        }
-        .custom-prompt-overlay.active { display: flex; }
-
-        .prompt-box {
-            background: var(--header-bg);
-            width: 80%;
-            max-width: 320px;
-            border-radius: 12px;
-            padding: 20px;
-            border: 1px solid #333;
-            box-shadow: 0 10px 25px rgba(0,0,0,0.5);
-            text-align: center;
-            animation: scaleIn 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-        }
-
-        @keyframes scaleIn {
-            from { transform: scale(0.8); opacity: 0; }
-            to { transform: scale(1); opacity: 1; }
-        }
-
-        .prompt-title { color: #fff; font-size: 18px; margin-bottom: 15px; }
-        .prompt-input { 
-            width: 100%; padding: 12px; margin-bottom: 15px;
-            background: #0f0f0f; border: 1px solid #333;
-            border-radius: 8px; color: white; font-size: 16px; outline: none;
-            text-align: center;
-        }
-        .prompt-input:focus { border-color: var(--accent-color); }
-        .prompt-actions { display: flex; gap: 10px; justify-content: center; }
-        .prompt-btn {
-            flex: 1; padding: 10px; border: none; border-radius: 8px;
-            font-size: 14px; font-weight: bold; cursor: pointer;
-            transition: opacity 0.2s;
-        }
-        .prompt-btn.cancel { background: rgba(255,255,255,0.1); color: #fff; }
-        .prompt-btn.confirm { background: var(--accent-color); color: #fff; }
-        .prompt-btn:active { opacity: 0.8; }
-
-        /* Custom Confirm Modal (Reusing styles slightly) */
-        .confirm-text { margin-bottom: 20px; font-size: 15px; color: #ddd; }
-
+        @media (max-width: 480px) { .keyboard-btn { font-size: 13px; padding: 12px 6px; line-height: 1.4; min-height: 48px; } }
+        @media (max-width: 350px) { #keyboard-area { grid-template-columns: 1fr; } .keyboard-btn.back-btn { grid-column: span 1; } }
     </style>
 </head>
 <body>
@@ -467,143 +224,84 @@
             <div class="bot-avatar" id="header-avatar">🎓</div>
             <div class="bot-name">
                 <h2 id="header-name">University Bot</h2>
-                <span class="bot-status" id="header-status">On</span>
+                <span class="bot-status" id="header-status">Online</span>
             </div>
         </div>
         
-        <!-- Menu Trigger -->
         <div class="header-actions" id="menu-btn" title="Menu">⋮</div>
 
-        <!-- Dropdown Menu -->
         <div class="menu-dropdown" id="menu-dropdown">
-            <div class="menu-item admin" onclick="checkAdmin()">
+            <div class="menu-item admin" onclick="window.checkAdmin()">
                 <span>⚙️</span> <span>لوحة التحكم (Admin)</span>
             </div>
-            <div class="menu-item" onclick="clearChat()">
+            <div class="menu-item" onclick="window.clearChat()">
                 <span>🗑️</span> <span>مسح الشات</span>
             </div>
-            <div class="menu-item danger" onclick="resetBot()">
+            <div class="menu-item danger" onclick="window.resetBot()">
                 <span>🏠</span> <span>العودة للبداية</span>
             </div>
         </div>
     </header>
 
     <div id="chat-area"></div>
-    <div class="typing-indicator" id="typing">typing...</div>
+    <div class="typing-indicator" id="typing">جاري المزامنة...</div>
     <div id="keyboard-area"></div>
-</div>
-
-<!-- Toast Container -->
-<div class="toast-container" id="toast-container"></div>
-
-<!-- Custom Prompt Modal -->
-<div class="custom-prompt-overlay" id="prompt-modal">
-    <div class="prompt-box">
-        <h3 class="prompt-title" id="prompt-title">Title</h3>
-        <input type="text" class="prompt-input" id="prompt-input-field" autocomplete="off">
-        <div class="prompt-actions">
-            <button class="prompt-btn cancel" id="prompt-cancel">Cancel</button>
-            <button class="prompt-btn confirm" id="prompt-confirm">OK</button>
-        </div>
-    </div>
 </div>
 
 <!-- Admin Modal -->
 <div class="admin-modal" id="admin-modal">
     <div class="modal-header">
-        <div class="modal-title">⚙️ إعدادات البوت (Owner)</div>
-        <div class="close-modal" onclick="closeAdminPanel()">×</div>
+        <div class="modal-title">⚙️ إعدادات البوت (JSONBin Sync)</div>
+        <div class="close-modal" onclick="window.closeAdminPanel()">×</div>
     </div>
 
-    <!-- 1. Basic Settings -->
     <div class="admin-section-title">الإعدادات الأساسية</div>
-    
-    <div class="form-group">
-        <label class="form-label">اسم البوت</label>
-        <input type="text" id="admin-bot-name" class="form-input" placeholder="University Library Bot">
-    </div>
+    <div class="form-group"><label class="form-label">اسم البوت</label><input type="text" id="admin-bot-name" class="form-input"></div>
+    <div class="form-group"><label class="form-label">الحالة</label><input type="text" id="admin-bot-status" class="form-input"></div>
+    <div class="form-group"><label class="form-label">رابط الصورة (URL)</label><input type="text" id="admin-bot-img" class="form-input"></div>
 
-    <div class="form-group">
-        <label class="form-label">الحالة (Status) - أسفل الاسم</label>
-        <input type="text" id="admin-bot-status" class="form-input" placeholder="Online">
-    </div>
-
-    <div class="form-group">
-        <label class="form-label">رابط الصورة (URL)</label>
-        <input type="text" id="admin-bot-img" class="form-input" placeholder="https://...">
-    </div>
-
-    <!-- 2. Chat Responses -->
     <div class="admin-section-title">ردود المحادثة</div>
-    <div style="font-size:11px; color:#777; margin-bottom:10px;">يمكنك استخدام {name} لاسم المادة/الدكتور و {botName} لاسم البوت.</div>
+    <div class="form-group"><label class="form-label">رسالة الترحيب</label><textarea id="admin-msg-welcome" class="form-textarea"></textarea></div>
+    <div class="form-group"><label class="form-label">اختيار مادة</label><textarea id="admin-msg-subject" class="form-textarea"></textarea></div>
+    <div class="form-group"><label class="form-label">اختيار دكتور</label><textarea id="admin-msg-doctor" class="form-textarea"></textarea></div>
+    <div class="form-group"><label class="form-label">عرض القوائم</label><textarea id="admin-msg-category" class="form-textarea"></textarea></div>
+    <div class="form-group"><label class="form-label">العودة لمادة</label><textarea id="admin-msg-back-subject" class="form-textarea"></textarea></div>
+    <div class="form-group"><label class="form-label">العودة لدكتور</label><textarea id="admin-msg-back-doctor" class="form-textarea"></textarea></div>
+    <div class="form-group"><label class="form-label">العودة للقائمة الرئيسية</label><textarea id="admin-msg-back-main" class="form-textarea"></textarea></div>
 
-    <div class="form-group">
-        <label class="form-label">رسالة الترحيب</label>
-        <textarea id="admin-msg-welcome" class="form-textarea"></textarea>
-    </div>
-
-    <div class="form-group">
-        <label class="form-label">اختيار مادة (Subject)</label>
-        <textarea id="admin-msg-subject" class="form-textarea"></textarea>
-    </div>
-
-    <div class="form-group">
-        <label class="form-label">اختيار دكتور (Doctor)</label>
-        <textarea id="admin-msg-doctor" class="form-textarea"></textarea>
-    </div>
-
-    <div class="form-group">
-        <label class="form-label">عرض القوائم (Sections)</label>
-        <textarea id="admin-msg-category" class="form-textarea"></textarea>
-    </div>
-
-    <div class="form-group">
-        <label class="form-label">العودة لمادة (Back to Subject)</label>
-        <textarea id="admin-msg-back-subject" class="form-textarea"></textarea>
-    </div>
-
-    <div class="form-group">
-        <label class="form-label">العودة لدكتور (Back to Doctor)</label>
-        <textarea id="admin-msg-back-doctor" class="form-textarea"></textarea>
-    </div>
-
-    <div class="form-group">
-        <label class="form-label">العودة للقائمة الرئيسية</label>
-        <textarea id="admin-msg-back-main" class="form-textarea"></textarea>
-    </div>
-
-    <!-- 3. Admins -->
     <div class="admin-section-title">المشرفين</div>
     <div class="form-group">
-        <label class="form-label">إضافة Admin (اسم المستخدم/الآيدي)</label>
+        <label class="form-label">إضافة Admin</label>
         <div style="display: flex; gap: 5px;">
-            <input type="text" id="admin-add-input" class="form-input" placeholder="مثلاً: Ali123">
-            <button class="btn-save" style="width: auto; margin: 0;" onclick="addAdmin()">+</button>
+            <input type="text" id="admin-add-input" class="form-input">
+            <button class="btn-save" style="width: auto; margin: 0; padding: 0 15px;" onclick="window.addAdmin()">+</button>
         </div>
     </div>
+    <div class="admin-list" id="admin-list-container"></div>
 
-    <div class="admin-list" id="admin-list-container">
-        <!-- Admins will appear here -->
-    </div>
-
-    <button class="btn-save" onclick="saveAdminSettings()">حفظ التعديلات</button>
+    <button class="btn-save" onclick="window.saveAdminSettings()">حفظ وتحديث JSONBin</button>
 </div>
 
 <script>
     // ============================================================
-    // === CONFIGURATION (Read from LocalStorage first) ===
+    // === 1. JSONBIN CONFIGURATION (مجاني وسريع) ===
+    // ============================================================
+    // ضع البيانات التي حصلت عليها من موقع JSONBin.io هنا
+    const JSONBIN_BIN_ID = "PUT_YOUR_BIN_ID_HERE"; // مثل: 64f8a9b8e9...
+    const JSONBIN_ACCESS_KEY = "PUT_YOUR_ACCESS_KEY_HERE"; // مثل: $2a$10$...
+
+    // ============================================================
+    // === 2. DATA (البيانات الكاملة) ===
     // ============================================================
     
-    const STORAGE_KEY = 'unibot_settings_v2';
-    
+    // Default Config
     const defaultConfig = {
-        botName: "University Library Bot",
+        botName: "University Library",
         botStatus: "Online",
         botIcon: "🎓", 
         botImage: "", 
         typingSpeed: 600,
         admins: ["owner"],
-        // Chat Responses with Placeholders
         welcomeMessage: "Welcome! 🎓<br>This is <b>{botName}</b>.<br>Please select a subject to begin.",
         subjectPrompt: "<b>{name}</b>\nPlease select a Doctor 👇",
         doctorPrompt: "<b>{name}</b>\nSelect a section 👇",
@@ -613,68 +311,30 @@
         backMain: "Back to Main Menu."
     };
 
-    function loadConfig() {
-        const saved = localStorage.getItem(STORAGE_KEY);
-        if (saved) {
-            return { ...defaultConfig, ...JSON.parse(saved) };
-        }
-        return defaultConfig;
-    }
-
-    let CONFIG = loadConfig();
-
-    // Helper to replace placeholders
-    function replacePlaceholders(text, name) {
-        let res = text || "";
-        if (name) {
-            res = res.replace(/{name}/g, name);
-        }
-        res = res.replace(/{botName}/g, CONFIG.botName);
-        return res;
-    }
-
-    // ============================================================
-    // === DATABASE (Offline Version) ===
-    // ============================================================
-    
+    // Full Database (Physics, Chem, Math, etc.)
     const database = {
         "Physics": {
             "doctors": ["Dr. Ahmed", "Dr. Mahmoud"],
             "Dr. Ahmed": {
                 "sections": ["📚 Lectures", "📄 Sheets"],
                 "📚 Lectures": [
-                    { name: "Chapter 1 Explanation.pdf", link: "javascript:void(0)" },
+                    { name: "Chapter 1 Explanation.pdf", link: "https://drive.google.com/file/d/1_iodAsHFokkB3rTyGls5hSGET9XuvtWM/view?usp=drivesdk" },
                     { name: "Chapter 2 Explanation.pdf", link: "javascript:void(0)" },
                     { name: "Chapter 3 Explanation.pdf", link: "javascript:void(0)" },
                     { name: "Chapter 4 Explanation.pdf", link: "javascript:void(0)" },
-                    { name: "Chapter 5 Explanation.pdf", link: "javascript:void(0)" },
-                    { name: "Chapter 6 Explanation.pdf", link: "javascript:void(0)" },
-                    { name: "Chapter 7 Explanation.pdf", link: "javascript:void(0)" },
-                    { name: "Chapter 8 Explanation.pdf", link: "javascript:void(0)" },
-                    { name: "Chapter 9 Explanation.pdf", link: "javascript:void(0)" },
-                    { name: "Chapter 10 Explanation.pdf", link: "javascript:void(0)" }
+                    { name: "Chapter 5 Explanation.pdf", link: "javascript:void(0)" }
                 ],
                 "📄 Sheets": [
-                    { name: "Experiment Sheet 1.pdf", link: "javascript:void(0)" },
-                    { name: "Experiment Sheet 2.pdf", link: "javascript:void(0)" },
-                    { name: "Experiment Sheet 3.pdf", link: "javascript:void(0)" },
-                    { name: "Experiment Sheet 4.pdf", link: "javascript:void(0)" },
-                    { name: "Experiment Sheet 5.pdf", link: "javascript:void(0)" }
+                    { name: "Experiment Sheet 1.pdf", link: "javascript:void(0)" }
                 ]
             },
             "Dr. Mahmoud": {
                 "sections": ["📚 Lectures", "📖 References"],
                 "📚 Lectures": [
-                    { name: "Equations Lecture 1.pdf", link: "javascript:void(0)" },
-                    { name: "Equations Lecture 2.pdf", link: "javascript:void(0)" },
-                    { name: "Motion Lecture.pdf", link: "javascript:void(0)" },
-                    { name: "Forces Lecture.pdf", link: "javascript:void(0)" },
-                    { name: "Energy Lecture.pdf", link: "javascript:void(0)" }
+                    { name: "Equations Lecture 1.pdf", link: "javascript:void(0)" }
                 ],
                 "📖 References": [
-                    { name: "Chapter 1 Review.pdf", link: "javascript:void(0)" },
-                    { name: "Chapter 2 Review.pdf", link: "javascript:void(0)" },
-                    { name: "Final Review.pdf", link: "javascript:void(0)" }
+                    { name: "Chapter 1 Review.pdf", link: "javascript:void(0)" }
                 ]
             }
         },
@@ -684,27 +344,16 @@
                 "sections": ["📚 Lectures", "📄 Sheets"],
                 "📚 Lectures": [
                     { name: "Organic Chemistry Intro.pdf", link: "javascript:void(0)" },
-                    { name: "Carbon and Reactions.pdf", link: "javascript:void(0)" },
-                    { name: "Hydrocarbons.pdf", link: "javascript:void(0)" },
-                    { name: "Alcohols.pdf", link: "javascript:void(0)" },
-                    { name: "Aldehydes.pdf", link: "javascript:void(0)" },
-                    { name: "Ketones.pdf", link: "javascript:void(0)" },
-                    { name: "Carboxylic Acids.pdf", link: "javascript:void(0)" },
-                    { name: "Esters.pdf", link: "javascript:void(0)" },
-                    { name: "Amines.pdf", link: "javascript:void(0)" },
-                    { name: "Complex Reactions.pdf", link: "javascript:void(0)" }
+                    { name: "Carbon and Reactions.pdf", link: "javascript:void(0)" }
                 ],
                 "📄 Sheets": [
-                    { name: "Reactions Sheet 1.pdf", link: "javascript:void(0)" },
-                    { name: "Reactions Sheet 2.pdf", link: "javascript:void(0)" }
+                    { name: "Reactions Sheet 1.pdf", link: "javascript:void(0)" }
                 ]
             },
             "Dr. Mona": {
                 "sections": ["📚 Lectures"],
                 "📚 Lectures": [
-                    { name: "Analytical Chemistry 1.pdf", link: "javascript:void(0)" },
-                    { name: "Analytical Chemistry 2.pdf", link: "javascript:void(0)" },
-                    { name: "Analytical Chemistry 3.pdf", link: "javascript:void(0)" }
+                    { name: "Analytical Chemistry 1.pdf", link: "javascript:void(0)" }
                 ]
             }
         },
@@ -714,30 +363,19 @@
                 "sections": ["📚 Lectures"],
                 "📚 Lectures": [
                     { name: "Differentiation - Functions.pdf", link: "javascript:void(0)" },
-                    { name: "Differentiation - Limits.pdf", link: "javascript:void(0)" },
-                    { name: "Differentiation - Derivatives.pdf", link: "javascript:void(0)" },
-                    { name: "Integration - Intro.pdf", link: "javascript:void(0)" },
-                    { name: "Integration - Methods.pdf", link: "javascript:void(0)" },
-                    { name: "Integration - Areas.pdf", link: "javascript:void(0)" },
-                    { name: "Linear Algebra 1.pdf", link: "javascript:void(0)" },
-                    { name: "Linear Algebra 2.pdf", link: "javascript:void(0)" },
-                    { name: "Linear Algebra 3.pdf", link: "javascript:void(0)" },
-                    { name: "Differential Equations.pdf", link: "javascript:void(0)" }
+                    { name: "Integration - Methods.pdf", link: "javascript:void(0)" }
                 ]
             },
             "Dr. Samy": {
                 "sections": ["📄 Sheets"],
                 "📄 Sheets": [
-                    { name: "Problems Sheet 1.pdf", link: "javascript:void(0)" },
-                    { name: "Problems Sheet 2.pdf", link: "javascript:void(0)" },
-                    { name: "Problems Sheet 3.pdf", link: "javascript:void(0)" }
+                    { name: "Problems Sheet 1.pdf", link: "javascript:void(0)" }
                 ]
             },
             "Dr. Rami": {
                 "sections": ["✅ Solutions"],
                 "✅ Solutions": [
-                    { name: "Problems Sheet 1 Solution.pdf", link: "javascript:void(0)" },
-                    { name: "Problems Sheet 2 Solution.pdf", link: "javascript:void(0)" }
+                    { name: "Problems Sheet 1 Solution.pdf", link: "javascript:void(0)" }
                 ]
             }
         },
@@ -746,28 +384,16 @@
             "Dr. Laila": {
                 "sections": ["📚 Lectures", "📖 References"],
                 "📚 Lectures": [
-                    { name: "Cell and Tissues.pdf", link: "javascript:void(0)" },
-                    { name: "Digestive System.pdf", link: "javascript:void(0)" },
-                    { name: "Respiratory System.pdf", link: "javascript:void(0)" },
-                    { name: "Circulatory System.pdf", link: "javascript:void(0)" },
-                    { name: "Nervous System.pdf", link: "javascript:void(0)" },
-                    { name: "Excretory System.pdf", link: "javascript:void(0)" },
-                    { name: "Genetics 1.pdf", link: "javascript:void(0)" },
-                    { name: "Genetics 2.pdf", link: "javascript:void(0)" },
-                    { name: "Genetics 3.pdf", link: "javascript:void(0)" },
-                    { name: "Evolution.pdf", link: "javascript:void(0)" }
+                    { name: "Cell and Tissues.pdf", link: "javascript:void(0)" }
                 ],
                 "📖 References": [
-                    { name: "General Biology Summary.pdf", link: "javascript:void(0)" },
-                    { name: "Previous Exams.pdf", link: "javascript:void(0)" }
+                    { name: "General Biology Summary.pdf", link: "javascript:void(0)" }
                 ]
             },
             "Dr. Omar": {
                 "sections": ["📄 Sheets"],
                 "📄 Sheets": [
-                    { name: "Practical Sheet 1.pdf", link: "javascript:void(0)" },
-                    { name: "Practical Sheet 2.pdf", link: "javascript:void(0)" },
-                    { name: "Anatomy Sheet.pdf", link: "javascript:void(0)" }
+                    { name: "Practical Sheet 1.pdf", link: "javascript:void(0)" }
                 ]
             }
         },
@@ -776,26 +402,13 @@
             "Dr. Hany": {
                 "sections": ["📚 Lectures"],
                 "📚 Lectures": [
-                    { name: "Earth Science Intro.pdf", link: "javascript:void(0)" },
-                    { name: "Minerals and Rocks 1.pdf", link: "javascript:void(0)" },
-                    { name: "Minerals and Rocks 2.pdf", link: "javascript:void(0)" },
-                    { name: "Earthquakes and Volcanoes.pdf", link: "javascript:void(0)" },
-                    { name: "Folding and Faulting.pdf", link: "javascript:void(0)" }
+                    { name: "Earth Science Intro.pdf", link: "javascript:void(0)" }
                 ]
             },
             "Dr. Tareq": {
                 "sections": ["📖 References"],
                 "📖 References": [
-                    { name: "Sedimentary Rocks Review.pdf", link: "javascript:void(0)" },
-                    { name: "Igneous Rocks Review.pdf", link: "javascript:void(0)" },
-                    { name: "Metamorphic Rocks Review.pdf", link: "javascript:void(0)" },
-                    { name: "Geological Time Review.pdf", link: "javascript:void(0)" },
-                    { name: "Egypt Geological History Review.pdf", link: "javascript:void(0)" },
-                    { name: "Final Exam Model.pdf", link: "javascript:void(0)" },
-                    { name: "Exam Model Solution.pdf", link: "javascript:void(0)" },
-                    { name: "Very Important Questions.pdf", link: "javascript:void(0)" },
-                    { name: "Geological Laws.pdf", link: "javascript:void(0)" },
-                    { name: "Geological Maps.pdf", link: "javascript:void(0)" }
+                    { name: "Sedimentary Rocks Review.pdf", link: "javascript:void(0)" }
                 ]
             }
         },
@@ -804,146 +417,106 @@
             "Dr. Sarah": {
                 "sections": ["📚 Lectures"],
                 "📚 Lectures": [
-                    { name: "Unit 1 - Family & Friends.pdf", link: "javascript:void(0)" },
-                    { name: "Unit 2 - Daily Routine.pdf", link: "javascript:void(0)" },
-                    { name: "Unit 3 - Food & Drink.pdf", link: "javascript:void(0)" },
-                    { name: "Unit 4 - At Airport.pdf", link: "javascript:void(0)" },
-                    { name: "Unit 5 - Holidays.pdf", link: "javascript:void(0)" },
-                    { name: "Unit 6 - Technology.pdf", link: "javascript:void(0)" },
-                    { name: "Unit 7 - Health.pdf", link: "javascript:void(0)" },
-                    { name: "Unit 8 - Education.pdf", link: "javascript:void(0)" },
-                    { name: "Unit 9 - Work.pdf", link: "javascript:void(0)" },
-                    { name: "Unit 10 - The Environment.pdf", link: "javascript:void(0)" }
+                    { name: "Unit 1 - Family & Friends.pdf", link: "javascript:void(0)" }
                 ]
             },
             "Dr. Ali": {
                 "sections": ["🗣️ Vocabulary"],
                 "🗣️ Vocabulary": [
-                    { name: "Vocabulary List Unit 1-3.pdf", link: "javascript:void(0)" },
-                    { name: "Vocabulary List Unit 4-6.pdf", link: "javascript:void(0)" },
-                    { name: "Vocabulary List Unit 7-10.pdf", link: "javascript:void(0)" },
-                    { name: "Idioms and Phrases.pdf", link: "javascript:void(0)" }
+                    { name: "Vocabulary List Unit 1-3.pdf", link: "javascript:void(0)" }
                 ]
             },
             "Dr. Noha": {
                 "sections": ["✅ Grammar"],
                 "✅ Grammar": [
-                    { name: "Grammar: Present Simple.pdf", link: "javascript:void(0)" },
-                    { name: "Grammar: Present Continuous.pdf", link: "javascript:void(0)" },
-                    { name: "Grammar: Past Simple.pdf", link: "javascript:void(0)" },
-                    { name: "Grammar: Past Continuous.pdf", link: "javascript:void(0)" },
-                    { name: "Grammar: Future Forms.pdf", link: "javascript:void(0)" },
-                    { name: "Grammar: Conditionals.pdf", link: "javascript:void(0)" }
+                    { name: "Grammar: Present Simple.pdf", link: "javascript:void(0)" }
                 ]
             }
         }
     };
 
-    // ============================================================
-    // === UI UTILITIES (Toast, Prompt, Confirm) ===
-    // ============================================================
+    let CONFIG = { ...defaultConfig };
 
-    function showToast(message, type = 'success') {
-        const container = document.getElementById('toast-container');
-        const toast = document.createElement('div');
-        toast.className = `toast ${type}`;
-        toast.innerText = message;
-        
-        container.appendChild(toast);
-        
-        // Auto remove
-        setTimeout(() => {
-            toast.style.animation = 'fadeOut 0.3s forwards';
-            setTimeout(() => toast.remove(), 300);
-        }, 3000);
+    // ============================================================
+    // === 3. SYNC LOGIC (POLLING) ===
+    // ============================================================
+    
+    function fetchConfig() {
+        if (!JSONBIN_BIN_ID || JSONBIN_BIN_ID === "PUT_YOUR_BIN_ID_HERE") {
+            console.warn("JSONBin ID not set. Using Offline Defaults.");
+            applyConfig(CONFIG);
+            return;
+        }
+
+        fetch(`https://api.jsonbin.io/v3/b/${JSONBIN_BIN_ID}/latest`, {
+            headers: {
+                'X-Master-Key': JSONBIN_ACCESS_KEY,
+                'X-Bin-Meta': 'false' 
+            }
+        })
+        .then(res => {
+            if (!res.ok) throw new Error("Failed to fetch");
+            return res.json();
+        })
+        .then(data => {
+            CONFIG = { ...defaultConfig, ...data };
+            console.log("Config synced from JSONBin:", CONFIG);
+            applyConfig(CONFIG);
+        })
+        .catch(err => {
+            console.error("Sync Error:", err);
+        });
     }
 
-    function showCustomPrompt(title, placeholder, callback) {
-        const modal = document.getElementById('prompt-modal');
-        const titleEl = document.getElementById('prompt-title');
-        const inputEl = document.getElementById('prompt-input-field');
-        const cancelBtn = document.getElementById('prompt-cancel');
-        const confirmBtn = document.getElementById('prompt-confirm');
-
-        titleEl.innerText = title;
-        inputEl.placeholder = placeholder;
-        inputEl.value = '';
-        modal.classList.add('active');
-
-        function cleanup() {
-            modal.classList.remove('active');
-            cancelBtn.removeEventListener('click', onCancel);
-            confirmBtn.removeEventListener('click', onConfirm);
+    function saveConfigToBin(newConfig) {
+        if (!JSONBIN_BIN_ID || JSONBIN_BIN_ID === "PUT_YOUR_BIN_ID_HERE") {
+            alert("❌ لقد نسيت وضع Bin ID و Access Key في الكود!");
+            return;
         }
 
-        function onCancel() {
-            cleanup();
-            callback(null);
-        }
-
-        function onConfirm() {
-            cleanup();
-            callback(inputEl.value.trim());
-        }
-
-        cancelBtn.addEventListener('click', onCancel);
-        confirmBtn.addEventListener('click', onConfirm);
-        
-        // Enter key to confirm
-        inputEl.onkeydown = (e) => {
-            if(e.key === 'Enter') onConfirm();
-        };
-        
-        // Focus input
-        setTimeout(() => inputEl.focus(), 100);
+        fetch(`https://api.jsonbin.io/v3/b/${JSONBIN_BIN_ID}`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Master-Key': JSONBIN_ACCESS_KEY
+            },
+            body: JSON.stringify(newConfig)
+        })
+        .then(res => {
+            if (!res.ok) throw new Error("Save failed");
+            alert("✅ تم حفظ الإعدادات في JSONBin!");
+            window.closeAdminPanel();
+        })
+        .catch(err => {
+            alert("❌ حدث خطأ أثناء الحفظ: " + err.message);
+        });
     }
 
-    function showCustomConfirm(message, callback) {
-        // Reusing prompt modal structure for simplicity, but changing content
-        // In a larger app, a dedicated modal component would be better.
-        const modal = document.getElementById('prompt-modal');
-        const titleEl = document.getElementById('prompt-title');
-        const inputEl = document.getElementById('prompt-input-field');
-        const cancelBtn = document.getElementById('prompt-cancel');
-        const confirmBtn = document.getElementById('prompt-confirm');
-
-        titleEl.innerText = "Are you sure?";
-        inputEl.style.display = 'none'; // Hide input
+    function applyConfig(newConfig) {
+        CONFIG = newConfig;
+        document.getElementById('header-name').innerText = CONFIG.botName;
+        document.getElementById('header-status').innerText = CONFIG.botStatus;
+        const avatarEl = document.getElementById('header-avatar');
         
-        // Add text paragraph dynamically
-        const p = document.createElement('p');
-        p.className = 'confirm-text';
-        p.innerText = message;
-        
-        // Insert p before input
-        modal.querySelector('.prompt-box').insertBefore(p, inputEl);
-
-        modal.classList.add('active');
-
-        function cleanup() {
-            modal.classList.remove('active');
-            inputEl.style.display = 'block'; // Restore for next time
-            p.remove();
-            cancelBtn.removeEventListener('click', onCancel);
-            confirmBtn.removeEventListener('click', onConfirm);
+        if (CONFIG.botImage && CONFIG.botImage.trim() !== "") {
+            avatarEl.style.backgroundImage = `url('${CONFIG.botImage}')`;
+            avatarEl.innerText = ""; 
+        } else {
+            avatarEl.style.backgroundImage = "none";
+            avatarEl.innerText = CONFIG.botIcon;
         }
+    }
 
-        function onCancel() {
-            cleanup();
-            callback(false);
-        }
-
-        function onConfirm() {
-            cleanup();
-            callback(true);
-        }
-
-        cancelBtn.addEventListener('click', onCancel);
-        confirmBtn.addEventListener('click', onConfirm);
+    // Helper to replace placeholders
+    function replacePlaceholders(text, name) {
+        let res = text || "";
+        if (name) res = res.replace(/{name}/g, name);
+        res = res.replace(/{botName}/g, CONFIG.botName);
+        return res;
     }
 
     // ============================================================
-    // === APP LOGIC ===
+    // === 4. APP LOGIC ===
     // ============================================================
 
     const subjects = Object.keys(database);
@@ -964,7 +537,6 @@
     const adminAddInput = document.getElementById('admin-add-input');
     const adminListContainer = document.getElementById('admin-list-container');
 
-    // New Response Inputs
     const respWelcome = document.getElementById('admin-msg-welcome');
     const respSubject = document.getElementById('admin-msg-subject');
     const respDoctor = document.getElementById('admin-msg-doctor');
@@ -977,29 +549,18 @@
         const msgDiv = document.createElement('div');
         msgDiv.classList.add('message');
         msgDiv.classList.add(sender === 'bot' ? 'msg-bot' : 'msg-user');
-
-        if (isHtml) {
-            msgDiv.innerHTML = content;
-        } else {
-            msgDiv.innerText = content;
-        }
+        if (isHtml) msgDiv.innerHTML = content; else msgDiv.innerText = content;
 
         const timeSpan = document.createElement('span');
         timeSpan.classList.add('timestamp');
         timeSpan.innerText = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
-        
         msgDiv.appendChild(timeSpan);
 
         chatArea.appendChild(msgDiv);
         scrollToBottom();
     }
 
-    function scrollToBottom() {
-        requestAnimationFrame(() => {
-             chatArea.scrollTop = chatArea.scrollHeight;
-        });
-    }
-
+    function scrollToBottom() { setTimeout(() => { chatArea.scrollTop = chatArea.scrollHeight; }, 0); }
     function botReply(text, isHtml = false) {
         typingIndicator.classList.add('active');
         scrollToBottom();
@@ -1018,65 +579,31 @@
         return btn;
     }
 
-    // --- Menu Logic ---
+    menuBtn.addEventListener('click', (e) => { e.stopPropagation(); menuDropdown.classList.toggle('active'); });
+    document.addEventListener('click', (e) => { if (!menuDropdown.contains(e.target) && e.target !== menuBtn) menuDropdown.classList.remove('active'); });
 
-    menuBtn.addEventListener('click', (e) => {
-        e.stopPropagation(); 
-        menuDropdown.classList.toggle('active');
-    });
-
-    document.addEventListener('click', (e) => {
-        if (!menuDropdown.contains(e.target) && e.target !== menuBtn) {
-            menuDropdown.classList.remove('active');
-        }
-    });
-
-    // 1. Clear Chat
     window.clearChat = function() {
-        chatArea.innerHTML = '';
-        resetStateVariables();
-        closeMenu();
-        
-        setTimeout(() => {
-            botReply("Chat cleared. 🧹<br>Welcome back! Choose a subject 👇", true);
-        }, 100);
+        chatArea.innerHTML = ''; resetStateVariables();
+        menuDropdown.classList.remove('active');
+        setTimeout(() => { botReply("Chat cleared. 🧹<br>Welcome back! Choose a subject 👇", true); }, 100);
     }
-
-    // 2. Reset Bot
     window.resetBot = function() {
-        resetStateVariables();
-        closeMenu();
+        resetStateVariables(); menuDropdown.classList.remove('active');
         addMessage("🏠 Back to Main Menu", 'user');
         botReply("Bot restarted. Please select a subject 👇", true);
     }
 
-    // --- Admin Logic ---
-
-    function closeMenu() {
-        menuDropdown.classList.remove('active');
-    }
-
     window.checkAdmin = function() {
-        closeMenu();
-        showCustomPrompt(
-            "Admin Access", 
-            "Enter Password", 
-            (password) => {
-                if (password === "1234") {
-                    openAdminPanel();
-                } else if (password !== null) {
-                    showToast("❌ Wrong Password!", "error");
-                }
-            }
-        );
+        menuDropdown.classList.remove('active');
+        const password = prompt("Please enter Admin Password:");
+        if (password === "1234") openAdminPanel();
+        else if (password !== null) alert("❌ Wrong Password!");
     }
 
     function openAdminPanel() {
         adminNameInput.value = CONFIG.botName;
         adminStatusInput.value = CONFIG.botStatus;
         adminImgInput.value = CONFIG.botImage || "";
-        
-        // Fill Response Inputs
         respWelcome.value = CONFIG.welcomeMessage;
         respSubject.value = CONFIG.subjectPrompt;
         respDoctor.value = CONFIG.doctorPrompt;
@@ -1084,14 +611,11 @@
         respBackSubject.value = CONFIG.backSubject;
         respBackDoctor.value = CONFIG.backDoctor;
         respBackMain.value = CONFIG.backMain;
-        
         renderAdminList();
         adminModal.classList.add('active');
     }
 
-    window.closeAdminPanel = function() {
-        adminModal.classList.remove('active');
-    }
+    window.closeAdminPanel = function() { adminModal.classList.remove('active'); }
 
     function renderAdminList() {
         adminListContainer.innerHTML = '';
@@ -1099,15 +623,12 @@
             adminListContainer.innerHTML = '<div style="color:#777; font-size:13px;">No admins added yet.</div>';
             return;
         }
-
         CONFIG.admins.forEach((admin, index) => {
             const div = document.createElement('div');
             div.className = 'admin-item';
-            
             const nameSpan = document.createElement('span');
             nameSpan.className = 'admin-name';
             nameSpan.innerText = admin;
-
             if (admin !== 'owner') {
                 const removeBtn = document.createElement('button');
                 removeBtn.className = 'btn-remove';
@@ -1119,7 +640,6 @@
                 div.appendChild(nameSpan);
                 div.innerHTML += '<span style="color:#4dabf7; font-size:12px;"> (Owner)</span>';
             }
-
             adminListContainer.appendChild(div);
         });
     }
@@ -1132,183 +652,103 @@
                 CONFIG.admins.push(name);
                 adminAddInput.value = '';
                 renderAdminList();
-            } else {
-                showToast("Admin already exists!", "error");
-            }
+            } else alert("Admin already exists!");
         }
     }
-
     window.removeAdmin = function(index) {
-        showCustomConfirm("Are you sure you want to remove this admin?", (result) => {
-            if(result) {
-                CONFIG.admins.splice(index, 1);
-                renderAdminList();
-                showToast("Admin removed successfully.");
-            }
-        });
+        if (confirm("Are you sure you want to remove this admin?")) {
+            CONFIG.admins.splice(index, 1);
+            renderAdminList();
+        }
     }
 
     window.saveAdminSettings = function() {
-        CONFIG.botName = adminNameInput.value.trim() || defaultConfig.botName;
-        CONFIG.botStatus = adminStatusInput.value.trim() || defaultConfig.botStatus;
-        CONFIG.botImage = adminImgInput.value.trim();
-
-        // Save Messages
-        CONFIG.welcomeMessage = respWelcome.value;
-        CONFIG.subjectPrompt = respSubject.value;
-        CONFIG.doctorPrompt = respDoctor.value;
-        CONFIG.categoryPrompt = respCategory.value;
-        CONFIG.backSubject = respBackSubject.value;
-        CONFIG.backDoctor = respBackDoctor.value;
-        CONFIG.backMain = respBackMain.value;
-        
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(CONFIG));
-
-        // Apply Visual Changes
-        document.querySelector('#header-name').innerText = CONFIG.botName;
-        document.querySelector('#header-status').innerText = CONFIG.botStatus;
-
-        const avatarEl = document.querySelector('#header-avatar');
-        
-        if (CONFIG.botImage && CONFIG.botImage.trim() !== "") {
-            avatarEl.style.backgroundImage = `url('${CONFIG.botImage}')`;
-            avatarEl.innerText = ""; 
-        } else {
-            avatarEl.style.backgroundImage = "none";
-            avatarEl.innerText = CONFIG.botIcon;
-        }
-
-        showToast("✅ Settings Saved! Changes applied.");
-        closeAdminPanel();
+        const newConfig = {
+            botName: adminNameInput.value.trim() || defaultConfig.botName,
+            botStatus: adminStatusInput.value.trim() || defaultConfig.botStatus,
+            botImage: adminImgInput.value.trim(),
+            welcomeMessage: respWelcome.value,
+            subjectPrompt: respSubject.value,
+            doctorPrompt: respDoctor.value,
+            categoryPrompt: respCategory.value,
+            backSubject: respBackSubject.value,
+            backDoctor: respBackDoctor.value,
+            backMain: respBackMain.value,
+            admins: CONFIG.admins
+        };
+        CONFIG = { ...CONFIG, ...newConfig };
+        applyConfig(CONFIG);
+        saveConfigToBin(newConfig);
     }
 
-    function resetStateVariables() {
-        currentSubject = null;
-        currentDoctor = null;
-        currentCategory = null;
-        renderKeyboard();
-    }
+    function resetStateVariables() { currentSubject = null; currentDoctor = null; currentCategory = null; renderKeyboard(); }
 
     function renderKeyboard() {
         keyboardArea.innerHTML = '';
-
         if (!currentSubject) {
-            subjects.forEach(sub => {
-                keyboardArea.appendChild(createButton(sub, () => handleSubjectClick(sub)));
-            });
+            subjects.forEach(sub => { keyboardArea.appendChild(createButton(sub, () => handleSubjectClick(sub))); });
             return;
         }
-
         keyboardArea.appendChild(createButton("🔙 Back", goBack, true));
-
         if (currentSubject && !currentDoctor) {
             const subjectDoctors = database[currentSubject].doctors;
-            subjectDoctors.forEach(doc => {
-                keyboardArea.appendChild(createButton(doc, () => handleDoctorClick(doc)));
-            });
+            subjectDoctors.forEach(doc => { keyboardArea.appendChild(createButton(doc, () => handleDoctorClick(doc))); });
         } else if (currentSubject && currentDoctor && !currentCategory) {
             const doctorSections = database[currentSubject][currentDoctor].sections;
-            doctorSections.forEach(cat => {
-                keyboardArea.appendChild(createButton(cat, () => handleCategoryClick(cat)));
-            });
+            doctorSections.forEach(cat => { keyboardArea.appendChild(createButton(cat, () => handleCategoryClick(cat))); });
         } else if (currentSubject && currentDoctor && currentCategory) {
             const fileList = database[currentSubject][currentDoctor][currentCategory] || [];
             if (fileList.length > 0) {
-                fileList.forEach(file => {
-                    keyboardArea.appendChild(createButton(file.name, () => handleFileClick(file)));
-                });
+                fileList.forEach(file => { keyboardArea.appendChild(createButton(file.name, () => handleFileClick(file))); });
             } else {
                 const emptyBtn = createButton("❌ No files available", () => {});
-                emptyBtn.style.opacity = "0.5"; 
-                emptyBtn.style.cursor = "default";
+                emptyBtn.style.opacity = "0.5"; emptyBtn.style.cursor = "default";
                 keyboardArea.appendChild(emptyBtn);
             }
         }
     }
 
     function handleSubjectClick(subjectName) {
-        addMessage(subjectName, 'user');
-        currentSubject = subjectName; 
-        currentDoctor = null; 
-        currentCategory = null;
-        
-        const msg = replacePlaceholders(CONFIG.subjectPrompt, subjectName);
-        botReply(msg, true);
-        renderKeyboard();
+        addMessage(subjectName, 'user'); currentSubject = subjectName; currentDoctor = null; currentCategory = null;
+        const msg = replacePlaceholders(CONFIG.subjectPrompt, subjectName); botReply(msg, true); renderKeyboard();
     }
-
     function handleDoctorClick(doctorName) {
-        addMessage(doctorName, 'user');
-        currentDoctor = doctorName;
-        currentCategory = null;
-
-        const msg = replacePlaceholders(CONFIG.doctorPrompt, doctorName);
-        botReply(msg, true);
-        renderKeyboard();
+        addMessage(doctorName, 'user'); currentDoctor = doctorName; currentCategory = null;
+        const msg = replacePlaceholders(CONFIG.doctorPrompt, doctorName); botReply(msg, true); renderKeyboard();
     }
-
     function handleCategoryClick(categoryName) {
-        addMessage(categoryName, 'user');
-        currentCategory = categoryName;
-
-        const msg = replacePlaceholders(CONFIG.categoryPrompt, categoryName);
-        botReply(msg, true);
-        renderKeyboard();
+        addMessage(categoryName, 'user'); currentCategory = categoryName;
+        const msg = replacePlaceholders(CONFIG.categoryPrompt, categoryName); botReply(msg, true); renderKeyboard();
     }
-
     function handleFileClick(fileObj) {
         addMessage(`Open: ${fileObj.name}`, 'user');
-        
         setTimeout(() => {
             if (!fileObj.link || fileObj.link.startsWith("javascript:")) {
-                const htmlContent = `
-                    <div style="margin-bottom:5px;">📎 <b>${fileObj.name}</b></div>
-                    <div class="file-link-dummy">
-                        <span>⚠️</span><span>Link not configured</span>
-                    </div>`;
+                const htmlContent = `<div style="margin-bottom:5px;">📎 <b>${fileObj.name}</b></div><div class="file-link-dummy"><span>⚠️</span><span>Link not configured</span></div>`;
                 addMessage(htmlContent, 'bot', true);
             } else {
-                const htmlContent = `
-                    <div style="margin-bottom:5px;">📎 <b>${fileObj.name}</b></div>
-                    <a href="${fileObj.link}" target="_blank" class="file-link-btn">
-                        <span>📂</span><span>Download / Open File</span>
-                    </a>`;
+                const htmlContent = `<div style="margin-bottom:5px;">📎 <b>${fileObj.name}</b></div><a href="${fileObj.link}" target="_blank" class="file-link-btn"><span>📂</span><span>Download / Open File</span></a>`;
                 addMessage(htmlContent, 'bot', true);
             }
         }, 800);
     }
-
     function goBack() {
         addMessage("🔙 Back", 'user');
-        
         if (currentCategory) {
-            currentCategory = null;
-            const msg = replacePlaceholders(CONFIG.backDoctor, currentDoctor);
-            botReply(msg, true);
+            currentCategory = null; const msg = replacePlaceholders(CONFIG.backDoctor, currentDoctor); botReply(msg, true);
         } else if (currentDoctor) {
-            currentDoctor = null;
-            const msg = replacePlaceholders(CONFIG.backSubject, currentSubject);
-            botReply(msg, true);
+            currentDoctor = null; const msg = replacePlaceholders(CONFIG.backSubject, currentSubject); botReply(msg, true);
         } else if (currentSubject) {
-            currentSubject = null;
-            botReply(CONFIG.backMain, true);
+            currentSubject = null; botReply(CONFIG.backMain, true);
         }
         renderKeyboard();
     }
 
     // --- Initialization ---
-
     window.onload = () => {
-        document.querySelector('#header-name').innerText = CONFIG.botName;
-        document.querySelector('#header-status').innerText = CONFIG.botStatus;
-        const avatarEl = document.querySelector('#header-avatar');
-        
-        if (CONFIG.botImage && CONFIG.botImage.trim() !== "") {
-            avatarEl.style.backgroundImage = `url('${CONFIG.botImage}')`;
-            avatarEl.innerText = ""; 
-        } else {
-            avatarEl.innerText = CONFIG.botIcon;
-        }
+        // Polling: Check for updates every 10 seconds
+        fetchConfig();
+        setInterval(fetchConfig, 10000);
 
         setTimeout(() => {
             const welcomeMsg = replacePlaceholders(CONFIG.welcomeMessage, null);
