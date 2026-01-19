@@ -4,8 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>University Library Bot</title>
-    <!-- PWA Manifest Link -->
-    <link rel="manifest" href="manifest.json">
     <style>
         /* === Reset & Basic Settings === */
         html, body {
@@ -17,6 +15,7 @@
             background-color: #121212;
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
             color: #ffffff;
+            -webkit-tap-highlight-color: transparent;
         }
 
         :root {
@@ -35,6 +34,8 @@
             --file-dummy-text: #ff8888;
             --menu-bg: #1d2938;
             --modal-bg: rgba(0, 0, 0, 0.85);
+            --danger-color: #ff4444;
+            --success-color: #00c851;
         }
 
         * { box-sizing: border-box; }
@@ -77,7 +78,10 @@
             background-position: center;
             background-repeat: no-repeat;
             border: 2px solid transparent;
+            transition: transform 0.2s;
         }
+        
+        .header-info:active .bot-avatar { transform: scale(0.95); }
 
         .bot-name h2 { 
             font-size: 16px; margin: 0; font-weight: 600; line-height: 1.2; 
@@ -92,14 +96,16 @@
             padding: 5px 10px; 
             cursor: pointer; 
             user-select: none;
+            transition: opacity 0.2s;
         }
+        .header-actions:active { opacity: 0.7; }
 
         /* === Options Menu (Dropdown) === */
         .menu-dropdown {
             position: absolute;
             top: 55px;
             right: 10px;
-            width: 200px;
+            width: 220px;
             background-color: var(--menu-bg);
             border: 1px solid #000;
             border-radius: 8px;
@@ -108,6 +114,13 @@
             flex-direction: column;
             z-index: 100;
             overflow: hidden;
+            transform-origin: top right;
+            animation: menuFadeIn 0.2s ease-out;
+        }
+
+        @keyframes menuFadeIn {
+            from { opacity: 0; transform: scale(0.9); }
+            to { opacity: 1; transform: scale(1); }
         }
 
         .menu-dropdown.active { display: flex; }
@@ -132,12 +145,20 @@
             position: absolute;
             top: 0; left: 0; width: 100%; height: 100%;
             background-color: var(--modal-bg);
+            backdrop-filter: blur(5px);
             z-index: 200;
             display: none;
             flex-direction: column;
             padding: 20px;
             overflow-y: auto;
+            animation: slideUp 0.3s ease-out;
         }
+        
+        @keyframes slideUp {
+            from { transform: translateY(100%); }
+            to { transform: translateY(0); }
+        }
+
         .admin-modal.active { display: flex; }
 
         .modal-header {
@@ -145,7 +166,7 @@
             margin-bottom: 20px; padding-bottom: 10px; border-bottom: 1px solid #333;
         }
         .modal-title { font-size: 18px; font-weight: bold; color: #fff; }
-        .close-modal { font-size: 24px; color: #fff; cursor: pointer; }
+        .close-modal { font-size: 24px; color: #fff; cursor: pointer; padding: 5px; }
 
         .form-group { margin-bottom: 15px; }
         .form-label { display: block; margin-bottom: 5px; color: var(--text-secondary); font-size: 14px; }
@@ -153,7 +174,7 @@
             width: 100%; padding: 10px;
             background: rgba(255,255,255,0.1); border: 1px solid #444;
             border-radius: 6px; color: #fff; outline: none;
-            font-family: inherit;
+            font-family: inherit; transition: border-color 0.2s;
         }
         .form-textarea { height: 60px; resize: vertical; }
         .form-input:focus { border-color: var(--accent-color); }
@@ -168,9 +189,10 @@
             background-color: var(--accent-color);
             color: #fff; border: none; border-radius: 6px;
             font-size: 16px; font-weight: bold; cursor: pointer;
-            margin-top: 20px;
+            margin-top: 20px; transition: background 0.2s;
         }
         .btn-save:active { transform: scale(0.98); }
+        .btn-save:hover { background-color: #267fd3; }
 
         .admin-list { margin-top: 20px; }
         .admin-item {
@@ -181,7 +203,7 @@
         }
         .admin-name { font-size: 14px; }
         .btn-remove { 
-            background: #ff4444; color: #fff; border: none; 
+            background: var(--danger-color); color: #fff; border: none; 
             padding: 4px 8px; border-radius: 4px; font-size: 12px; cursor: pointer; 
         }
 
@@ -322,7 +344,6 @@
         .keyboard-btn:hover { background-color: var(--btn-hover); }
         .keyboard-btn:active { transform: scale(0.97); background-color: rgba(255,255,255,0.1); }
 
-        /* Back button special style */
         .keyboard-btn.back-btn {
             grid-column: span 2;
             background-color: rgba(0,0,0,0.3);
@@ -344,6 +365,98 @@
             #keyboard-area { grid-template-columns: 1fr; }
             .keyboard-btn.back-btn { grid-column: span 1; }
         }
+
+        /* === NEW: Custom UI Components === */
+
+        /* Toast Notification */
+        .toast-container {
+            position: absolute;
+            top: 70px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 1000;
+            pointer-events: none;
+            width: 90%;
+            max-width: 300px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .toast {
+            background: rgba(30, 30, 30, 0.95);
+            color: white;
+            padding: 10px 15px;
+            border-radius: 50px;
+            text-align: center;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            font-size: 14px;
+            animation: fadeDown 0.3s ease-out forwards;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .toast.success { border-left: 4px solid var(--success-color); }
+        .toast.error { border-left: 4px solid var(--danger-color); }
+
+        @keyframes fadeDown {
+            from { opacity: 0; transform: translateY(-20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes fadeOut {
+            to { opacity: 0; transform: translateY(-10px); }
+        }
+
+        /* Custom Prompt Modal */
+        .custom-prompt-overlay {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.7);
+            z-index: 300;
+            display: none;
+            justify-content: center;
+            align-items: center;
+            backdrop-filter: blur(3px);
+        }
+        .custom-prompt-overlay.active { display: flex; }
+
+        .prompt-box {
+            background: var(--header-bg);
+            width: 80%;
+            max-width: 320px;
+            border-radius: 12px;
+            padding: 20px;
+            border: 1px solid #333;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+            text-align: center;
+            animation: scaleIn 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+
+        @keyframes scaleIn {
+            from { transform: scale(0.8); opacity: 0; }
+            to { transform: scale(1); opacity: 1; }
+        }
+
+        .prompt-title { color: #fff; font-size: 18px; margin-bottom: 15px; }
+        .prompt-input { 
+            width: 100%; padding: 12px; margin-bottom: 15px;
+            background: #0f0f0f; border: 1px solid #333;
+            border-radius: 8px; color: white; font-size: 16px; outline: none;
+            text-align: center;
+        }
+        .prompt-input:focus { border-color: var(--accent-color); }
+        .prompt-actions { display: flex; gap: 10px; justify-content: center; }
+        .prompt-btn {
+            flex: 1; padding: 10px; border: none; border-radius: 8px;
+            font-size: 14px; font-weight: bold; cursor: pointer;
+            transition: opacity 0.2s;
+        }
+        .prompt-btn.cancel { background: rgba(255,255,255,0.1); color: #fff; }
+        .prompt-btn.confirm { background: var(--accent-color); color: #fff; }
+        .prompt-btn:active { opacity: 0.8; }
+
+        /* Custom Confirm Modal (Reusing styles slightly) */
+        .confirm-text { margin-bottom: 20px; font-size: 15px; color: #ddd; }
+
     </style>
 </head>
 <body>
@@ -354,7 +467,7 @@
             <div class="bot-avatar" id="header-avatar">🎓</div>
             <div class="bot-name">
                 <h2 id="header-name">University Bot</h2>
-                <span class="bot-status" id="header-status">Online</span>
+                <span class="bot-status" id="header-status">On</span>
             </div>
         </div>
         
@@ -378,6 +491,21 @@
     <div id="chat-area"></div>
     <div class="typing-indicator" id="typing">typing...</div>
     <div id="keyboard-area"></div>
+</div>
+
+<!-- Toast Container -->
+<div class="toast-container" id="toast-container"></div>
+
+<!-- Custom Prompt Modal -->
+<div class="custom-prompt-overlay" id="prompt-modal">
+    <div class="prompt-box">
+        <h3 class="prompt-title" id="prompt-title">Title</h3>
+        <input type="text" class="prompt-input" id="prompt-input-field" autocomplete="off">
+        <div class="prompt-actions">
+            <button class="prompt-btn cancel" id="prompt-cancel">Cancel</button>
+            <button class="prompt-btn confirm" id="prompt-confirm">OK</button>
+        </div>
+    </div>
 </div>
 
 <!-- Admin Modal -->
@@ -407,7 +535,7 @@
 
     <!-- 2. Chat Responses -->
     <div class="admin-section-title">ردود المحادثة</div>
-    <div style="font-size:10px; color:#777; margin-bottom:10px;">يمكنك استخدام {name} لاسم المادة/الدكتور و {botName} لاسم البوت.</div>
+    <div style="font-size:11px; color:#777; margin-bottom:10px;">يمكنك استخدام {name} لاسم المادة/الدكتور و {botName} لاسم البوت.</div>
 
     <div class="form-group">
         <label class="form-label">رسالة الترحيب</label>
@@ -712,6 +840,109 @@
     };
 
     // ============================================================
+    // === UI UTILITIES (Toast, Prompt, Confirm) ===
+    // ============================================================
+
+    function showToast(message, type = 'success') {
+        const container = document.getElementById('toast-container');
+        const toast = document.createElement('div');
+        toast.className = `toast ${type}`;
+        toast.innerText = message;
+        
+        container.appendChild(toast);
+        
+        // Auto remove
+        setTimeout(() => {
+            toast.style.animation = 'fadeOut 0.3s forwards';
+            setTimeout(() => toast.remove(), 300);
+        }, 3000);
+    }
+
+    function showCustomPrompt(title, placeholder, callback) {
+        const modal = document.getElementById('prompt-modal');
+        const titleEl = document.getElementById('prompt-title');
+        const inputEl = document.getElementById('prompt-input-field');
+        const cancelBtn = document.getElementById('prompt-cancel');
+        const confirmBtn = document.getElementById('prompt-confirm');
+
+        titleEl.innerText = title;
+        inputEl.placeholder = placeholder;
+        inputEl.value = '';
+        modal.classList.add('active');
+
+        function cleanup() {
+            modal.classList.remove('active');
+            cancelBtn.removeEventListener('click', onCancel);
+            confirmBtn.removeEventListener('click', onConfirm);
+        }
+
+        function onCancel() {
+            cleanup();
+            callback(null);
+        }
+
+        function onConfirm() {
+            cleanup();
+            callback(inputEl.value.trim());
+        }
+
+        cancelBtn.addEventListener('click', onCancel);
+        confirmBtn.addEventListener('click', onConfirm);
+        
+        // Enter key to confirm
+        inputEl.onkeydown = (e) => {
+            if(e.key === 'Enter') onConfirm();
+        };
+        
+        // Focus input
+        setTimeout(() => inputEl.focus(), 100);
+    }
+
+    function showCustomConfirm(message, callback) {
+        // Reusing prompt modal structure for simplicity, but changing content
+        // In a larger app, a dedicated modal component would be better.
+        const modal = document.getElementById('prompt-modal');
+        const titleEl = document.getElementById('prompt-title');
+        const inputEl = document.getElementById('prompt-input-field');
+        const cancelBtn = document.getElementById('prompt-cancel');
+        const confirmBtn = document.getElementById('prompt-confirm');
+
+        titleEl.innerText = "Are you sure?";
+        inputEl.style.display = 'none'; // Hide input
+        
+        // Add text paragraph dynamically
+        const p = document.createElement('p');
+        p.className = 'confirm-text';
+        p.innerText = message;
+        
+        // Insert p before input
+        modal.querySelector('.prompt-box').insertBefore(p, inputEl);
+
+        modal.classList.add('active');
+
+        function cleanup() {
+            modal.classList.remove('active');
+            inputEl.style.display = 'block'; // Restore for next time
+            p.remove();
+            cancelBtn.removeEventListener('click', onCancel);
+            confirmBtn.removeEventListener('click', onConfirm);
+        }
+
+        function onCancel() {
+            cleanup();
+            callback(false);
+        }
+
+        function onConfirm() {
+            cleanup();
+            callback(true);
+        }
+
+        cancelBtn.addEventListener('click', onCancel);
+        confirmBtn.addEventListener('click', onConfirm);
+    }
+
+    // ============================================================
     // === APP LOGIC ===
     // ============================================================
 
@@ -827,12 +1058,17 @@
 
     window.checkAdmin = function() {
         closeMenu();
-        const password = prompt("Please enter Admin Password:");
-        if (password === "1234") {
-            openAdminPanel();
-        } else if (password !== null) {
-            alert("❌ Wrong Password!");
-        }
+        showCustomPrompt(
+            "Admin Access", 
+            "Enter Password", 
+            (password) => {
+                if (password === "1234") {
+                    openAdminPanel();
+                } else if (password !== null) {
+                    showToast("❌ Wrong Password!", "error");
+                }
+            }
+        );
     }
 
     function openAdminPanel() {
@@ -897,16 +1133,19 @@
                 adminAddInput.value = '';
                 renderAdminList();
             } else {
-                alert("Admin already exists!");
+                showToast("Admin already exists!", "error");
             }
         }
     }
 
     window.removeAdmin = function(index) {
-        if (confirm("Are you sure you want to remove this admin?")) {
-            CONFIG.admins.splice(index, 1);
-            renderAdminList();
-        }
+        showCustomConfirm("Are you sure you want to remove this admin?", (result) => {
+            if(result) {
+                CONFIG.admins.splice(index, 1);
+                renderAdminList();
+                showToast("Admin removed successfully.");
+            }
+        });
     }
 
     window.saveAdminSettings = function() {
@@ -939,7 +1178,7 @@
             avatarEl.innerText = CONFIG.botIcon;
         }
 
-        alert("✅ Settings Saved! Changes will apply to new messages.");
+        showToast("✅ Settings Saved! Changes applied.");
         closeAdminPanel();
     }
 
@@ -1077,17 +1316,6 @@
             renderKeyboard();
         }, 500);
     };
-
-    // ============================================================
-    // === PWA SERVICE WORKER REGISTRATION ===
-    // ============================================================
-    if ('serviceWorker' in navigator) {
-      window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./sw.js')
-          .then(reg => console.log('Service Worker: Registered'))
-          .catch(err => console.log('Service Worker: Error: ' + err));
-      });
-    }
 
 </script>
 </body>
