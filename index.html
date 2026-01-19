@@ -2,7 +2,10 @@
 <html lang="ar" dir="ltr">
 <head>
     <meta charset="UTF-8">
+    <!-- أوامر قوية لمنع التخزين المؤقت -->
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>University Library Bot (Full Data)</title>
     
@@ -78,7 +81,7 @@
         .bot-name h2 { font-size: 16px; margin: 0; font-weight: 600; line-height: 1.2; }
         .bot-status { font-size: 13px; color: var(--text-secondary); margin-top: 2px; display: block; }
 
-        .header-actions { color: var(--text-secondary); font-size: 28px; line-height: 1; padding: 5px 10px; cursor: pointer; user-select: none; }
+        .header-actions { color: var(--text-secondary); font-size: 28px; line-height:1; padding: 5px 10px; cursor: pointer; user-select: none; }
         .header-actions:hover { color: #fff; }
 
         /* === Options Menu (Dropdown) === */
@@ -96,6 +99,7 @@
         .menu-item:hover { background-color: rgba(255,255,255,0.1); }
         .menu-item.danger { color: #ff6b6b; }
         .menu-item.admin { color: #4dabf7; font-weight: bold; }
+        .menu-item.refresh { color: #ffcc00; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
 
         /* === Admin Modal === */
@@ -231,6 +235,9 @@
         <div class="header-actions" id="menu-btn" title="Menu">⋮</div>
 
         <div class="menu-dropdown" id="menu-dropdown">
+            <div class="menu-item refresh" onclick="window.forceReload()">
+                <span>🔄</span> <span>تحديث قسري (Fix Cache)</span>
+            </div>
             <div class="menu-item admin" onclick="window.checkAdmin()">
                 <span>⚙️</span> <span>لوحة التحكم (Admin)</span>
             </div>
@@ -284,24 +291,27 @@
 
 <script>
     // ============================================================
-    // === 1. JSONBIN CONFIGURATION (مجاني وسريع) ===
+    // === 1. FORCE RELOAD FUNCTION ===
     // ============================================================
-    // ضع البيانات التي حصلت عليها من موقع JSONBin.io هنا
-    const JSONBIN_BIN_ID = "PUT_YOUR_BIN_ID_HERE"; // مثل: 64f8a9b8e9...
-    const JSONBIN_ACCESS_KEY = "PUT_YOUR_ACCESS_KEY_HERE"; // مثل: $2a$10$...
+    window.forceReload = function() {
+        document.getElementById('menu-dropdown').classList.remove('active');
+        if(confirm("سيتم مسح الذاكرة المؤقتة وإعادة تحميل الصفحة.")) {
+            if ('caches' in window) { caches.keys().then(function(names) { for (let name of names) caches.delete(name); }); }
+            if ('serviceWorker' in navigator) { navigator.serviceWorker.getRegistrations().then(function(registrations) { for(let registration of registrations) registration.unregister(); }); }
+            setTimeout(() => { window.location.reload(true); }, 500);
+        }
+    };
 
     // ============================================================
-    // === 2. DATA (البيانات الكاملة) ===
+    // === 2. JSONBIN CONFIGURATION ===
     // ============================================================
-    
-    // Default Config
+    const JSONBIN_BIN_ID = "PUT_YOUR_BIN_ID_HERE";
+    const JSONBIN_ACCESS_KEY = "PUT_YOUR_ACCESS_KEY_HERE";
+
     const defaultConfig = {
         botName: "University Library",
         botStatus: "Online",
-        botIcon: "🎓", 
-        botImage: "", 
-        typingSpeed: 600,
-        admins: ["owner"],
+        botIcon: "🎓", botImage: "", typingSpeed: 600, admins: ["owner"],
         welcomeMessage: "Welcome! 🎓<br>This is <b>{botName}</b>.<br>Please select a subject to begin.",
         subjectPrompt: "<b>{name}</b>\nPlease select a Doctor 👇",
         doctorPrompt: "<b>{name}</b>\nSelect a section 👇",
@@ -311,89 +321,143 @@
         backMain: "Back to Main Menu."
     };
 
-    // Full Database (Physics, Chem, Math, etc.)
+    let CONFIG = { ...defaultConfig };
+
+    // ============================================================
+    // === 3. FULL DATABASE (النظام التفصيلي الكامل) ===
+    // ============================================================
+    
     const database = {
         "Physics": {
             "doctors": ["Dr. Ahmed", "Dr. Mahmoud"],
             "Dr. Ahmed": {
                 "sections": ["📚 Lectures", "📄 Sheets"],
                 "📚 Lectures": [
-                    { name: "Chapter 1 Explanation.pdf", link: "https://drive.google.com/file/d/1_iodAsHFokkB3rTyGls5hSGET9XuvtWM/view?usp=drivesdk" },
-                    { name: "Chapter 2 Explanation.pdf", link: "javascript:void(0)" },
-                    { name: "Chapter 3 Explanation.pdf", link: "javascript:void(0)" },
-                    { name: "Chapter 4 Explanation.pdf", link: "javascript:void(0)" },
-                    { name: "Chapter 5 Explanation.pdf", link: "javascript:void(0)" }
+                    { name: "Chapter 1: Mechanics Basics.pdf", link: "https://drive.google.com/file/d/1_iodAsHFokkB3rTyGls5hSGET9XuvtWM/view?usp=drivesdk" },
+                    { name: "Chapter 2: Motion in One Dimension.pdf", link: "javascript:void(0)" },
+                    { name: "Chapter 3: Vectors.pdf", link: "javascript:void(0)" },
+                    { name: "Chapter 4: Motion in Two Dimensions.pdf", link: "javascript:void(0)" },
+                    { name: "Chapter 5: Laws of Motion.pdf", link: "javascript:void(0)" },
+                    { name: "Chapter 6: Work and Energy.pdf", link: "javascript:void(0)" }
                 ],
                 "📄 Sheets": [
-                    { name: "Experiment Sheet 1.pdf", link: "javascript:void(0)" }
+                    { name: "Experiment Sheet 1: Measurements.pdf", link: "javascript:void(0)" },
+                    { name: "Experiment Sheet 2: Simple Pendulum.pdf", link: "javascript:void(0)" },
+                    { name: "Experiment Sheet 3: Hooke's Law.pdf", link: "javascript:void(0)" },
+                    { name: "Solutions Sheet A.pdf", link: "javascript:void(0)" }
                 ]
             },
             "Dr. Mahmoud": {
                 "sections": ["📚 Lectures", "📖 References"],
                 "📚 Lectures": [
-                    { name: "Equations Lecture 1.pdf", link: "javascript:void(0)" }
+                    { name: "Lecture 1: Thermodynamics Intro.pdf", link: "javascript:void(0)" },
+                    { name: "Lecture 2: Heat Transfer.pdf", link: "javascript:void(0)" },
+                    { name: "Lecture 3: Kinetic Theory.pdf", link: "javascript:void(0)" },
+                    { name: "Lecture 4: First Law of Thermodynamics.pdf", link: "javascript:void(0)" },
+                    { name: "Lecture 5: Second Law of Thermodynamics.pdf", link: "javascript:void(0)" }
                 ],
                 "📖 References": [
-                    { name: "Chapter 1 Review.pdf", link: "javascript:void(0)" }
+                    { name: "Important Equations Summary.pdf", link: "javascript:void(0)" },
+                    { name: "Previous Exams (2019-2023).pdf", link: "javascript:void(0)" },
+                    { name: "Dr. Mahmoud's Notes.pdf", link: "javascript:void(0)" }
                 ]
             }
         },
         "Chemistry": {
-            "doctors": ["Dr. Saeed", "Dr. Mona"],
+            "doctors": ["Dr. Saeed", "Dr. Mona", "Dr. Kamal"],
             "Dr. Saeed": {
                 "sections": ["📚 Lectures", "📄 Sheets"],
                 "📚 Lectures": [
-                    { name: "Organic Chemistry Intro.pdf", link: "javascript:void(0)" },
-                    { name: "Carbon and Reactions.pdf", link: "javascript:void(0)" }
+                    { name: "Unit 1: Atomic Structure.pdf", link: "javascript:void(0)" },
+                    { name: "Unit 2: Chemical Bonding.pdf", link: "javascript:void(0)" },
+                    { name: "Unit 3: Periodic Table.pdf", link: "javascript:void(0)" },
+                    { name: "Unit 4: States of Matter.pdf", link: "javascript:void(0)" },
+                    { name: "Unit 5: Thermodynamics.pdf", link: "javascript:void(0)" }
                 ],
                 "📄 Sheets": [
-                    { name: "Reactions Sheet 1.pdf", link: "javascript:void(0)" }
+                    { name: "Organic Reactions Review.pdf", link: "javascript:void(0)" },
+                    { name: "Inorganic Solubility Rules.pdf", link: "javascript:void(0)" }
                 ]
             },
             "Dr. Mona": {
+                "sections": ["📚 Lectures", "🧪 Practical"],
+                "📚 Lectures": [
+                    { name: "Analytical Chem: Volumetric Analysis.pdf", link: "javascript:void(0)" },
+                    { name: "Analytical Chem: Gravimetric Analysis.pdf", link: "javascript:void(0)" },
+                    { name: "Qualitative Analysis Flowcharts.pdf", link: "javascript:void(0)" }
+                ],
+                "🧪 Practical": [
+                    { name: "Lab Safety Rules.pdf", link: "javascript:void(0)" },
+                    { name: "Practical Report Template.pdf", link: "javascript:void(0)" },
+                    { name: "Titration Procedures.pdf", link: "javascript:void(0)" },
+                    { name: "Salt Analysis Steps.pdf", link: "javascript:void(0)" }
+                ]
+            },
+            "Dr. Kamal": {
                 "sections": ["📚 Lectures"],
                 "📚 Lectures": [
-                    { name: "Analytical Chemistry 1.pdf", link: "javascript:void(0)" }
+                    { name: "Organic Chemistry I: Alkanes.pdf", link: "javascript:void(0)" },
+                    { name: "Organic Chemistry II: Alkenes.pdf", link: "javascript:void(0)" },
+                    { name: "Organic Chemistry III: Alkynes.pdf", link: "javascript:void(0)" },
+                    { name: "Nomenclature Guide.pdf", link: "javascript:void(0)" },
+                    { name: "Isomerism Explained.pdf", link: "javascript:void(0)" }
                 ]
             }
         },
         "Mathematics": {
-            "doctors": ["Dr. Kamel", "Dr. Samy", "Dr. Rami"],
+            "doctors": ["Dr. Kamel", "Dr. Samy"],
             "Dr. Kamel": {
-                "sections": ["📚 Lectures"],
+                "sections": ["📚 Lectures", "📖 References"],
                 "📚 Lectures": [
-                    { name: "Differentiation - Functions.pdf", link: "javascript:void(0)" },
-                    { name: "Integration - Methods.pdf", link: "javascript:void(0)" }
+                    { name: "Calculus I: Limits & Continuity.pdf", link: "javascript:void(0)" },
+                    { name: "Calculus II: Differentiation Rules.pdf", link: "javascript:void(0)" },
+                    { name: "Calculus III: Applications of Derivatives.pdf", link: "javascript:void(0)" },
+                    { name: "Integration Techniques.pdf", link: "javascript:void(0)" },
+                    { name: "Definite & Indefinite Integrals.pdf", link: "javascript:void(0)" }
+                ],
+                "📖 References": [
+                    { name: "Formulas Sheet (Important).pdf", link: "javascript:void(0)" },
+                    { name: "Common Integration Problems.pdf", link: "javascript:void(0)" },
+                    { name: "Graphing Functions Guide.pdf", link: "javascript:void(0)" }
                 ]
             },
             "Dr. Samy": {
-                "sections": ["📄 Sheets"],
+                "sections": ["📄 Sheets", "✅ Solutions"],
                 "📄 Sheets": [
-                    { name: "Problems Sheet 1.pdf", link: "javascript:void(0)" }
-                ]
-            },
-            "Dr. Rami": {
-                "sections": ["✅ Solutions"],
+                    { name: "Linear Algebra: Matrices.pdf", link: "javascript:void(0)" },
+                    { name: "Differential Equations.pdf", link: "javascript:void(0)" },
+                    { name: "Geometry: Vectors in 3D.pdf", link: "javascript:void(0)" },
+                    { name: "Complex Numbers Problems.pdf", link: "javascript:void(0)" },
+                    { name: "Statistics & Probability.pdf", link: "javascript:void(0)" }
+                ],
                 "✅ Solutions": [
-                    { name: "Problems Sheet 1 Solution.pdf", link: "javascript:void(0)" }
+                    { name: "Final Exam Solutions 2022.pdf", link: "javascript:void(0)" },
+                    { name: "Sheet 1 Solutions.pdf", link: "javascript:void(0)" },
+                    { name: "Sheet 2 Solutions.pdf", link: "javascript:void(0)" }
                 ]
             }
         },
         "Biology": {
-            "doctors": ["Dr. Laila", "Dr. Omar"],
+            "doctors": ["Dr. Laila"],
             "Dr. Laila": {
-                "sections": ["📚 Lectures", "📖 References"],
+                "sections": ["📚 Lectures", "📄 Sheets", "🖼️ Slides"],
                 "📚 Lectures": [
-                    { name: "Cell and Tissues.pdf", link: "javascript:void(0)" }
+                    { name: "Chapter 1: Cell Structure.pdf", link: "javascript:void(0)" },
+                    { name: "Chapter 2: Cell Membrane.pdf", link: "javascript:void(0)" },
+                    { name: "Chapter 3: Cell Division (Mitosis).pdf", link: "javascript:void(0)" },
+                    { name: "Chapter 4: Cell Division (Meiosis).pdf", link: "javascript:void(0)" },
+                    { name: "Chapter 5: Genetics: Mendel.pdf", link: "javascript:void(0)" }
                 ],
-                "📖 References": [
-                    { name: "General Biology Summary.pdf", link: "javascript:void(0)" }
-                ]
-            },
-            "Dr. Omar": {
-                "sections": ["📄 Sheets"],
                 "📄 Sheets": [
-                    { name: "Practical Sheet 1.pdf", link: "javascript:void(0)" }
+                    { name: "Monohybrid Cross Problems.pdf", link: "javascript:void(0)" },
+                    { name: "Dihybrid Cross Problems.pdf", link: "javascript:void(0)" },
+                    { name: "Blood Type Genetics.pdf", link: "javascript:void(0)" },
+                    { name: "Pedigree Analysis.pdf", link: "javascript:void(0)" }
+                ],
+                "🖼️ Slides": [
+                    { name: "Week 1 Slides.pptx", link: "javascript:void(0)" },
+                    { name: "Week 2 Slides.pptx", link: "javascript:void(0)" },
+                    { name: "Week 3 Slides.pptx", link: "javascript:void(0)" }
                 ]
             }
         },
@@ -402,94 +466,84 @@
             "Dr. Hany": {
                 "sections": ["📚 Lectures"],
                 "📚 Lectures": [
-                    { name: "Earth Science Intro.pdf", link: "javascript:void(0)" }
+                    { name: "Introduction to Earth Science.pdf", link: "javascript:void(0)" },
+                    { name: "Mineralogy Basics.pdf", link: "javascript:void(0)" },
+                    { name: "Igneous Rocks Formation.pdf", link: "javascript:void(0)" },
+                    { name: "Sedimentary Rocks Formation.pdf", link: "javascript:void(0)" },
+                    { name: "Metamorphic Rocks Formation.pdf", link: "javascript:void(0)" }
                 ]
             },
             "Dr. Tareq": {
                 "sections": ["📖 References"],
                 "📖 References": [
-                    { name: "Sedimentary Rocks Review.pdf", link: "javascript:void(0)" }
+                    { name: "Geological Time Scale.pdf", link: "javascript:void(0)" },
+                    { name: "Plate Tectonics Theory.pdf", link: "javascript:void(0)" },
+                    { name: "Geological Maps Reading Guide.pdf", link: "javascript:void(0)" },
+                    { name: "Egypt's Geomorphology.pdf", link: "javascript:void(0)" },
+                    { name: "Fossils and Paleontology.pdf", link: "javascript:void(0)" }
                 ]
             }
         },
         "English": {
-            "doctors": ["Dr. Sarah", "Dr. Ali", "Dr. Noha"],
+            "doctors": ["Dr. Sarah", "Dr. Ali"],
             "Dr. Sarah": {
-                "sections": ["📚 Lectures"],
+                "sections": ["📚 Lectures", "🗣️ Listening"],
                 "📚 Lectures": [
-                    { name: "Unit 1 - Family & Friends.pdf", link: "javascript:void(0)" }
+                    { name: "Unit 1: Communication Skills.pdf", link: "javascript:void(0)" },
+                    { name: "Unit 2: Presentation Skills.pdf", link: "javascript:void(0)" },
+                    { name: "Unit 3: Academic Writing I.pdf", link: "javascript:void(0)" },
+                    { name: "Unit 4: Academic Writing II.pdf", link: "javascript:void(0)" },
+                    { name: "Unit 5: Research Methods.pdf", link: "javascript:void(0)" }
+                ],
+                "🗣️ Listening": [
+                    { name: "Audio Track 1.mp3", link: "javascript:void(0)" },
+                    { name: "Audio Track 2.mp3", link: "javascript:void(0)" },
+                    { name: "Audio Script.pdf", link: "javascript:void(0)" }
                 ]
             },
             "Dr. Ali": {
-                "sections": ["🗣️ Vocabulary"],
-                "🗣️ Vocabulary": [
-                    { name: "Vocabulary List Unit 1-3.pdf", link: "javascript:void(0)" }
-                ]
-            },
-            "Dr. Noha": {
-                "sections": ["✅ Grammar"],
+                "sections": ["✅ Grammar", "📖 Vocabulary"],
                 "✅ Grammar": [
-                    { name: "Grammar: Present Simple.pdf", link: "javascript:void(0)" }
+                    { name: "Review of Tenses.pdf", link: "javascript:void(0)" },
+                    { name: "Passive & Active Voice.pdf", link: "javascript:void(0)" },
+                    { name: "Reported Speech.pdf", link: "javascript:void(0)" },
+                    { name: "Conditionals (0, 1, 2, 3).pdf", link: "javascript:void(0)" },
+                    { name: "Clauses & Conjunctions.pdf", link: "javascript:void(0)" }
+                ],
+                "📖 Vocabulary": [
+                    { name: "Academic Word List (A-C).pdf", link: "javascript:void(0)" },
+                    { name: "Academic Word List (D-F).pdf", link: "javascript:void(0)" },
+                    { name: "Common Idioms for Students.pdf", link: "javascript:void(0)" },
+                    { name: "Phrasal Verbs in Context.pdf", link: "javascript:void(0)" }
                 ]
             }
         }
     };
 
-    let CONFIG = { ...defaultConfig };
-
     // ============================================================
-    // === 3. SYNC LOGIC (POLLING) ===
+    // === 4. SYNC LOGIC (POLLING) ===
     // ============================================================
-    
     function fetchConfig() {
         if (!JSONBIN_BIN_ID || JSONBIN_BIN_ID === "PUT_YOUR_BIN_ID_HERE") {
-            console.warn("JSONBin ID not set. Using Offline Defaults.");
-            applyConfig(CONFIG);
-            return;
+            applyConfig(CONFIG); return;
         }
-
         fetch(`https://api.jsonbin.io/v3/b/${JSONBIN_BIN_ID}/latest`, {
-            headers: {
-                'X-Master-Key': JSONBIN_ACCESS_KEY,
-                'X-Bin-Meta': 'false' 
-            }
+            headers: { 'X-Master-Key': JSONBIN_ACCESS_KEY, 'X-Bin-Meta': 'false' }
         })
-        .then(res => {
-            if (!res.ok) throw new Error("Failed to fetch");
-            return res.json();
-        })
-        .then(data => {
-            CONFIG = { ...defaultConfig, ...data };
-            console.log("Config synced from JSONBin:", CONFIG);
-            applyConfig(CONFIG);
-        })
-        .catch(err => {
-            console.error("Sync Error:", err);
-        });
+        .then(res => { if (!res.ok) throw new Error("Failed"); return res.json(); })
+        .then(data => { CONFIG = { ...defaultConfig, ...data }; applyConfig(CONFIG); })
+        .catch(err => { console.error("Sync Error:", err); });
     }
 
     function saveConfigToBin(newConfig) {
-        if (!JSONBIN_BIN_ID || JSONBIN_BIN_ID === "PUT_YOUR_BIN_ID_HERE") {
-            alert("❌ لقد نسيت وضع Bin ID و Access Key في الكود!");
-            return;
-        }
-
+        if (!JSONBIN_BIN_ID || JSONBIN_BIN_ID === "PUT_YOUR_BIN_ID_HERE") { alert("❌ لقد نسيت وضع Bin ID!"); return; }
         fetch(`https://api.jsonbin.io/v3/b/${JSONBIN_BIN_ID}`, {
             method: 'PUT',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-Master-Key': JSONBIN_ACCESS_KEY
-            },
+            headers: { 'Content-Type': 'application/json', 'X-Master-Key': JSONBIN_ACCESS_KEY },
             body: JSON.stringify(newConfig)
         })
-        .then(res => {
-            if (!res.ok) throw new Error("Save failed");
-            alert("✅ تم حفظ الإعدادات في JSONBin!");
-            window.closeAdminPanel();
-        })
-        .catch(err => {
-            alert("❌ حدث خطأ أثناء الحفظ: " + err.message);
-        });
+        .then(res => { if (!res.ok) throw new Error("Save failed"); alert("✅ تم حفظ الإعدادات!"); window.closeAdminPanel(); })
+        .catch(err => { alert("❌ خطأ: " + err.message); });
     }
 
     function applyConfig(newConfig) {
@@ -497,17 +551,13 @@
         document.getElementById('header-name').innerText = CONFIG.botName;
         document.getElementById('header-status').innerText = CONFIG.botStatus;
         const avatarEl = document.getElementById('header-avatar');
-        
         if (CONFIG.botImage && CONFIG.botImage.trim() !== "") {
-            avatarEl.style.backgroundImage = `url('${CONFIG.botImage}')`;
-            avatarEl.innerText = ""; 
+            avatarEl.style.backgroundImage = `url('${CONFIG.botImage}')`; avatarEl.innerText = ""; 
         } else {
-            avatarEl.style.backgroundImage = "none";
-            avatarEl.innerText = CONFIG.botIcon;
+            avatarEl.style.backgroundImage = "none"; avatarEl.innerText = CONFIG.botIcon;
         }
     }
 
-    // Helper to replace placeholders
     function replacePlaceholders(text, name) {
         let res = text || "";
         if (name) res = res.replace(/{name}/g, name);
@@ -516,27 +566,21 @@
     }
 
     // ============================================================
-    // === 4. APP LOGIC ===
+    // === 5. APP LOGIC ===
     // ============================================================
-
     const subjects = Object.keys(database);
-    let currentSubject = null;
-    let currentDoctor = null;
-    let currentCategory = null;
-
+    let currentSubject = null, currentDoctor = null, currentCategory = null;
     const chatArea = document.getElementById('chat-area');
     const keyboardArea = document.getElementById('keyboard-area');
     const typingIndicator = document.getElementById('typing');
     const menuBtn = document.getElementById('menu-btn');
     const menuDropdown = document.getElementById('menu-dropdown');
-    
     const adminModal = document.getElementById('admin-modal');
     const adminNameInput = document.getElementById('admin-bot-name');
     const adminStatusInput = document.getElementById('admin-bot-status');
     const adminImgInput = document.getElementById('admin-bot-img');
     const adminAddInput = document.getElementById('admin-add-input');
     const adminListContainer = document.getElementById('admin-list-container');
-
     const respWelcome = document.getElementById('admin-msg-welcome');
     const respSubject = document.getElementById('admin-msg-subject');
     const respDoctor = document.getElementById('admin-msg-doctor');
@@ -547,50 +591,38 @@
 
     function addMessage(content, sender, isHtml = false) {
         const msgDiv = document.createElement('div');
-        msgDiv.classList.add('message');
-        msgDiv.classList.add(sender === 'bot' ? 'msg-bot' : 'msg-user');
+        msgDiv.classList.add('message', sender === 'bot' ? 'msg-bot' : 'msg-user');
         if (isHtml) msgDiv.innerHTML = content; else msgDiv.innerText = content;
-
         const timeSpan = document.createElement('span');
         timeSpan.classList.add('timestamp');
         timeSpan.innerText = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
         msgDiv.appendChild(timeSpan);
-
         chatArea.appendChild(msgDiv);
         scrollToBottom();
     }
 
     function scrollToBottom() { setTimeout(() => { chatArea.scrollTop = chatArea.scrollHeight; }, 0); }
     function botReply(text, isHtml = false) {
-        typingIndicator.classList.add('active');
-        scrollToBottom();
-        setTimeout(() => {
-            typingIndicator.classList.remove('active');
-            addMessage(text, 'bot', isHtml);
-        }, CONFIG.typingSpeed);
+        typingIndicator.classList.add('active'); scrollToBottom();
+        setTimeout(() => { typingIndicator.classList.remove('active'); addMessage(text, 'bot', isHtml); }, CONFIG.typingSpeed);
     }
 
     function createButton(text, onClick, isBack = false) {
         const btn = document.createElement('div');
-        btn.classList.add('keyboard-btn');
-        if(isBack) btn.classList.add('back-btn');
-        btn.innerText = text;
-        btn.onclick = onClick;
-        return btn;
+        btn.classList.add('keyboard-btn'); if(isBack) btn.classList.add('back-btn');
+        btn.innerText = text; btn.onclick = onClick; return btn;
     }
 
     menuBtn.addEventListener('click', (e) => { e.stopPropagation(); menuDropdown.classList.toggle('active'); });
     document.addEventListener('click', (e) => { if (!menuDropdown.contains(e.target) && e.target !== menuBtn) menuDropdown.classList.remove('active'); });
 
     window.clearChat = function() {
-        chatArea.innerHTML = ''; resetStateVariables();
-        menuDropdown.classList.remove('active');
+        chatArea.innerHTML = ''; resetStateVariables(); menuDropdown.classList.remove('active');
         setTimeout(() => { botReply("Chat cleared. 🧹<br>Welcome back! Choose a subject 👇", true); }, 100);
     }
     window.resetBot = function() {
         resetStateVariables(); menuDropdown.classList.remove('active');
-        addMessage("🏠 Back to Main Menu", 'user');
-        botReply("Bot restarted. Please select a subject 👇", true);
+        addMessage("🏠 Back to Main Menu", 'user'); botReply("Bot restarted. Please select a subject 👇", true);
     }
 
     window.checkAdmin = function() {
@@ -601,94 +633,54 @@
     }
 
     function openAdminPanel() {
-        adminNameInput.value = CONFIG.botName;
-        adminStatusInput.value = CONFIG.botStatus;
-        adminImgInput.value = CONFIG.botImage || "";
-        respWelcome.value = CONFIG.welcomeMessage;
-        respSubject.value = CONFIG.subjectPrompt;
-        respDoctor.value = CONFIG.doctorPrompt;
-        respCategory.value = CONFIG.categoryPrompt;
-        respBackSubject.value = CONFIG.backSubject;
-        respBackDoctor.value = CONFIG.backDoctor;
-        respBackMain.value = CONFIG.backMain;
-        renderAdminList();
-        adminModal.classList.add('active');
+        adminNameInput.value = CONFIG.botName; adminStatusInput.value = CONFIG.botStatus;
+        adminImgInput.value = CONFIG.botImage || ""; respWelcome.value = CONFIG.welcomeMessage;
+        respSubject.value = CONFIG.subjectPrompt; respDoctor.value = CONFIG.doctorPrompt;
+        respCategory.value = CONFIG.categoryPrompt; respBackSubject.value = CONFIG.backSubject;
+        respBackDoctor.value = CONFIG.backDoctor; respBackMain.value = CONFIG.backMain;
+        renderAdminList(); adminModal.classList.add('active');
     }
 
     window.closeAdminPanel = function() { adminModal.classList.remove('active'); }
 
     function renderAdminList() {
         adminListContainer.innerHTML = '';
-        if (!CONFIG.admins || CONFIG.admins.length === 0) {
-            adminListContainer.innerHTML = '<div style="color:#777; font-size:13px;">No admins added yet.</div>';
-            return;
-        }
+        if (!CONFIG.admins || CONFIG.admins.length === 0) { adminListContainer.innerHTML = '<div style="color:#777; font-size:13px;">No admins added yet.</div>'; return; }
         CONFIG.admins.forEach((admin, index) => {
-            const div = document.createElement('div');
-            div.className = 'admin-item';
-            const nameSpan = document.createElement('span');
-            nameSpan.className = 'admin-name';
-            nameSpan.innerText = admin;
+            const div = document.createElement('div'); div.className = 'admin-item';
+            const nameSpan = document.createElement('span'); nameSpan.className = 'admin-name'; nameSpan.innerText = admin;
             if (admin !== 'owner') {
-                const removeBtn = document.createElement('button');
-                removeBtn.className = 'btn-remove';
-                removeBtn.innerText = 'حذف';
-                removeBtn.onclick = () => removeAdmin(index);
-                div.appendChild(nameSpan);
-                div.appendChild(removeBtn);
-            } else {
-                div.appendChild(nameSpan);
-                div.innerHTML += '<span style="color:#4dabf7; font-size:12px;"> (Owner)</span>';
-            }
+                const removeBtn = document.createElement('button'); removeBtn.className = 'btn-remove'; removeBtn.innerText = 'حذف'; removeBtn.onclick = () => removeAdmin(index);
+                div.appendChild(nameSpan); div.appendChild(removeBtn);
+            } else { div.appendChild(nameSpan); div.innerHTML += '<span style="color:#4dabf7; font-size:12px;"> (Owner)</span>'; }
             adminListContainer.appendChild(div);
         });
     }
 
     window.addAdmin = function() {
         const name = adminAddInput.value.trim();
-        if (name) {
-            if (!CONFIG.admins) CONFIG.admins = [];
-            if (!CONFIG.admins.includes(name)) {
-                CONFIG.admins.push(name);
-                adminAddInput.value = '';
-                renderAdminList();
-            } else alert("Admin already exists!");
-        }
+        if (name) { if (!CONFIG.admins) CONFIG.admins = []; if (!CONFIG.admins.includes(name)) { CONFIG.admins.push(name); adminAddInput.value = ''; renderAdminList(); } else alert("Admin already exists!"); }
     }
-    window.removeAdmin = function(index) {
-        if (confirm("Are you sure you want to remove this admin?")) {
-            CONFIG.admins.splice(index, 1);
-            renderAdminList();
-        }
-    }
+    window.removeAdmin = function(index) { if (confirm("Are you sure?")) { CONFIG.admins.splice(index, 1); renderAdminList(); } }
 
     window.saveAdminSettings = function() {
         const newConfig = {
             botName: adminNameInput.value.trim() || defaultConfig.botName,
             botStatus: adminStatusInput.value.trim() || defaultConfig.botStatus,
             botImage: adminImgInput.value.trim(),
-            welcomeMessage: respWelcome.value,
-            subjectPrompt: respSubject.value,
-            doctorPrompt: respDoctor.value,
-            categoryPrompt: respCategory.value,
-            backSubject: respBackSubject.value,
-            backDoctor: respBackDoctor.value,
-            backMain: respBackMain.value,
-            admins: CONFIG.admins
+            welcomeMessage: respWelcome.value, subjectPrompt: respSubject.value,
+            doctorPrompt: respDoctor.value, categoryPrompt: respCategory.value,
+            backSubject: respBackSubject.value, backDoctor: respBackDoctor.value,
+            backMain: respBackMain.value, admins: CONFIG.admins
         };
-        CONFIG = { ...CONFIG, ...newConfig };
-        applyConfig(CONFIG);
-        saveConfigToBin(newConfig);
+        CONFIG = { ...CONFIG, ...newConfig }; applyConfig(CONFIG); saveConfigToBin(newConfig);
     }
 
     function resetStateVariables() { currentSubject = null; currentDoctor = null; currentCategory = null; renderKeyboard(); }
 
     function renderKeyboard() {
         keyboardArea.innerHTML = '';
-        if (!currentSubject) {
-            subjects.forEach(sub => { keyboardArea.appendChild(createButton(sub, () => handleSubjectClick(sub))); });
-            return;
-        }
+        if (!currentSubject) { subjects.forEach(sub => { keyboardArea.appendChild(createButton(sub, () => handleSubjectClick(sub))); }); return; }
         keyboardArea.appendChild(createButton("🔙 Back", goBack, true));
         if (currentSubject && !currentDoctor) {
             const subjectDoctors = database[currentSubject].doctors;
@@ -698,63 +690,34 @@
             doctorSections.forEach(cat => { keyboardArea.appendChild(createButton(cat, () => handleCategoryClick(cat))); });
         } else if (currentSubject && currentDoctor && currentCategory) {
             const fileList = database[currentSubject][currentDoctor][currentCategory] || [];
-            if (fileList.length > 0) {
-                fileList.forEach(file => { keyboardArea.appendChild(createButton(file.name, () => handleFileClick(file))); });
-            } else {
-                const emptyBtn = createButton("❌ No files available", () => {});
-                emptyBtn.style.opacity = "0.5"; emptyBtn.style.cursor = "default";
-                keyboardArea.appendChild(emptyBtn);
+            if (fileList.length > 0) { fileList.forEach(file => { keyboardArea.appendChild(createButton(file.name, () => handleFileClick(file))); }); } else {
+                const emptyBtn = createButton("❌ No files available", () => {}); emptyBtn.style.opacity = "0.5"; emptyBtn.style.cursor = "default"; keyboardArea.appendChild(emptyBtn);
             }
         }
     }
 
-    function handleSubjectClick(subjectName) {
-        addMessage(subjectName, 'user'); currentSubject = subjectName; currentDoctor = null; currentCategory = null;
-        const msg = replacePlaceholders(CONFIG.subjectPrompt, subjectName); botReply(msg, true); renderKeyboard();
-    }
-    function handleDoctorClick(doctorName) {
-        addMessage(doctorName, 'user'); currentDoctor = doctorName; currentCategory = null;
-        const msg = replacePlaceholders(CONFIG.doctorPrompt, doctorName); botReply(msg, true); renderKeyboard();
-    }
-    function handleCategoryClick(categoryName) {
-        addMessage(categoryName, 'user'); currentCategory = categoryName;
-        const msg = replacePlaceholders(CONFIG.categoryPrompt, categoryName); botReply(msg, true); renderKeyboard();
-    }
+    function handleSubjectClick(subjectName) { addMessage(subjectName, 'user'); currentSubject = subjectName; currentDoctor = null; currentCategory = null; const msg = replacePlaceholders(CONFIG.subjectPrompt, subjectName); botReply(msg, true); renderKeyboard(); }
+    function handleDoctorClick(doctorName) { addMessage(doctorName, 'user'); currentDoctor = doctorName; currentCategory = null; const msg = replacePlaceholders(CONFIG.doctorPrompt, doctorName); botReply(msg, true); renderKeyboard(); }
+    function handleCategoryClick(categoryName) { addMessage(categoryName, 'user'); currentCategory = categoryName; const msg = replacePlaceholders(CONFIG.categoryPrompt, categoryName); botReply(msg, true); renderKeyboard(); }
     function handleFileClick(fileObj) {
         addMessage(`Open: ${fileObj.name}`, 'user');
         setTimeout(() => {
-            if (!fileObj.link || fileObj.link.startsWith("javascript:")) {
-                const htmlContent = `<div style="margin-bottom:5px;">📎 <b>${fileObj.name}</b></div><div class="file-link-dummy"><span>⚠️</span><span>Link not configured</span></div>`;
-                addMessage(htmlContent, 'bot', true);
-            } else {
-                const htmlContent = `<div style="margin-bottom:5px;">📎 <b>${fileObj.name}</b></div><a href="${fileObj.link}" target="_blank" class="file-link-btn"><span>📂</span><span>Download / Open File</span></a>`;
-                addMessage(htmlContent, 'bot', true);
-            }
+            if (!fileObj.link || fileObj.link.startsWith("javascript:")) { const htmlContent = `<div style="margin-bottom:5px;">📎 <b>${fileObj.name}</b></div><div class="file-link-dummy"><span>⚠️</span><span>Link not configured</span></div>`; addMessage(htmlContent, 'bot', true); } else { const htmlContent = `<div style="margin-bottom:5px;">📎 <b>${fileObj.name}</b></div><a href="${fileObj.link}" target="_blank" class="file-link-btn"><span>📂</span><span>Download / Open File</span></a>`; addMessage(htmlContent, 'bot', true); }
         }, 800);
     }
     function goBack() {
         addMessage("🔙 Back", 'user');
-        if (currentCategory) {
-            currentCategory = null; const msg = replacePlaceholders(CONFIG.backDoctor, currentDoctor); botReply(msg, true);
-        } else if (currentDoctor) {
-            currentDoctor = null; const msg = replacePlaceholders(CONFIG.backSubject, currentSubject); botReply(msg, true);
-        } else if (currentSubject) {
-            currentSubject = null; botReply(CONFIG.backMain, true);
-        }
+        if (currentCategory) { currentCategory = null; const msg = replacePlaceholders(CONFIG.backDoctor, currentDoctor); botReply(msg, true); } else if (currentDoctor) { currentDoctor = null; const msg = replacePlaceholders(CONFIG.backSubject, currentSubject); botReply(msg, true); } else if (currentSubject) { currentSubject = null; botReply(CONFIG.backMain, true); }
         renderKeyboard();
     }
 
     // --- Initialization ---
     window.onload = () => {
-        // Polling: Check for updates every 10 seconds
+        if ('caches' in window) { caches.keys().then(function(names) { for (let name of names) caches.delete(name); }); }
+        if ('serviceWorker' in navigator) { navigator.serviceWorker.getRegistrations().then(function(registrations) { for(let registration of registrations) registration.unregister(); }); }
         fetchConfig();
         setInterval(fetchConfig, 10000);
-
-        setTimeout(() => {
-            const welcomeMsg = replacePlaceholders(CONFIG.welcomeMessage, null);
-            botReply(welcomeMsg, true);
-            renderKeyboard();
-        }, 500);
+        setTimeout(() => { const welcomeMsg = replacePlaceholders(CONFIG.welcomeMessage, null); botReply(welcomeMsg, true); renderKeyboard(); }, 500);
     };
 
 </script>
