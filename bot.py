@@ -2,6 +2,7 @@ import os
 import subprocess
 import time
 import asyncio
+import uuid
 from pyrogram import Client, filters
 from pyrogram.types import Message
 from pyrogram.errors import FloodWait
@@ -15,18 +16,16 @@ BOT_TOKEN = os.environ.get("BOT_TOKEN", "")
 
 # تعريف مجلد العمل المؤقت
 TEMP_DIR = "/tmp/bot_work"
-# التأكد من وجود المجلد
 try:
     os.makedirs(TEMP_DIR, exist_ok=True)
 except Exception as e:
     print(f"Error creating dir: {e}")
 
 # ==========================================
-# تهيئة البوت
+# تهيئة البوت (in_memory لتجنب مشاكل الملفات)
 # ==========================================
-# نستخدم in_memory=True لمنع إنشاء ملفات الجلسة التي قد تسبب مشاكل صلاحيات
 app = Client(
-    "pdf_compressor_bot", 
+    "my_pdf_bot", 
     api_id=API_ID, 
     api_hash=API_HASH, 
     bot_token=BOT_TOKEN,
@@ -46,53 +45,54 @@ def compress_pdf(input_path, output_path):
             f"-sOutputFile={output_path}",
             input_path
         ]
-        # تشغيل وطباعة الأخطاء إن وجدت
+        # تشغيل الأمر
         result = subprocess.run(command, check=True, capture_output=True, text=True, timeout=300)
         return True
     except subprocess.TimeoutExpired:
-        print("Error: Compression timed out")
-        return False
-    except subprocess.CalledProcessError as e:
-        print(f"GS Error: {e.stderr}")
         return False
     except Exception as e:
-        print(f"General Compression Error: {e}")
+        print(f"Compression Error: {e}")
         return False
 
 @app.on_message(filters.document & ~filters.forwarded)
 async def handle_pdf(client: Client, message: Message):
     try:
         doc = message.document
+        
+        # التحقق من نوع الملف
         if not doc.file_name.endswith(".pdf"):
             await message.reply("❌ هذا البوت لضغط ملفات PDF فقط.")
             return
 
-        # محاولة إرسال رسالة البدء
+        # رسالة البدء
         status_msg = await message.reply("⏳ جاري بدء العملية...")
         
-        input_pdf = os.path.join(TEMP_DIR, f"in_{message.message_id}.pdf")
-        output_pdf = os.path.join(TEMP_DIR, f"out_{message.message_id}.pdf")
+        # إنشاء أسماء فريدة للملفات المؤقتة باستخدام uuid و time
+        # هذا يحل مشكلة message_id
+        random_id = str(uuid.uuid4())[:8]
+        input_pdf = os.path.join(TEMP_DIR, f"in_{random_id}.pdf")
+        output_pdf = os.path.join(TEMP_DIR, f"out_{random_id}.pdf")
 
         # 1. التحميل
-        await status_msg.edit("📥 جاري التحميل...")
+        await status_msg.edit("📥 جاري تحميل الملف...")
         
-        # تحميل مع تجاوز الأخطاء البسيطة
         try:
             await message.download(file_name=input_pdf)
         except Exception as e:
             await status_msg.edit(f"❌ فشل التحميل: {str(e)}")
             return
 
-        if not os.path.exists(input_pdf):
-            await status_msg.edit("❌ لم يتم العثور على الملف بعد التحميل.")
+        # التأكد من وجود الملف
+        if not os.path.exists(input_pdf) or os.path.getsize(input_pdf) == 0:
+            await status_msg.edit("❌ الملف فارغ أو لم يتم تحميله بشكل صحيح.")
             return
 
         # 2. الضغط
-        await status_msg.edit("⚙️ جاري الضغط...")
+        await status_msg.edit("⚙️ جاري ضغط الملف (قد يستغرق وقتاً)...")
         success = compress_pdf(input_pdf, output_pdf)
         
         if not success:
-            await status_msg.edit("❌ فشلت عملية الضغط (قد يكون الملف تالفاً).")
+            await status_msg.edit("❌ فشلت عملية الضغط.")
             return
 
         # 3. الإرسال
@@ -100,24 +100,24 @@ async def handle_pdf(client: Client, message: Message):
             old_size = os.path.getsize(input_pdf) / (1024 * 1024)
             new_size = os.path.getsize(output_pdf) / (1024 * 1024)
             
-            caption = f"✅ تم الضغط.\nالحجم القديم: {old_size:.2f} MB\nالحجم الجديد: {new_size:.2f} MB"
+            caption = f"✅ تم الضغط.\nمن: {old_size:.2f} MB\nإلى: {new_size:.2f} MB"
             
             await message.reply_document(output_pdf, caption=caption)
             await status_msg.delete()
         else:
-            await status_msg.edit("❌ فشل إنشاء الملف المضغوط.")
+            await status_msg.edit("❌ لم يتم إنشاء الملف المضغوط.")
 
     except FloodWait as e:
         await asyncio.sleep(e.x)
     except Exception as e:
-        # هذا الجزء مهم جداً: سيخبرك بالخطأ الحقيقي في التليجرام
+        # إرسال الخطأ للمستخدم
         try:
-            await message.reply(f"🚨 حدث خطأ في البوت: {str(e)}")
+            await message.reply(f"🚨 خطأ: {str(e)}")
         except:
             pass
-        print(f"Critical Error: {e}")
+        print(f"Error: {e}")
     finally:
-        # تنظيف
+        # التنظيف
         for f in [input_pdf, output_pdf]:
             if os.path.exists(f):
                 try:
@@ -125,12 +125,6 @@ async def handle_pdf(client: Client, message: Message):
                 except:
                     pass
 
-# ==========================================
-# تشغيل البوت مع طباعة الأخطاء
-# ==========================================
 if __name__ == "__main__":
-    print("Bot is starting...")
-    try:
-        app.run()
-    except Exception as e:
-        print(f"Failed to start: {e}")
+    print("Bot is running...")
+    app.run()
