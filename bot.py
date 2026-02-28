@@ -14,16 +14,12 @@ API_ID = int(os.environ.get("API_ID", 0))
 API_HASH = os.environ.get("API_HASH", "")
 BOT_TOKEN = os.environ.get("BOT_TOKEN", "")
 
-# تعريف مجلد العمل المؤقت
 TEMP_DIR = "/tmp/bot_work"
 try:
     os.makedirs(TEMP_DIR, exist_ok=True)
 except Exception as e:
     print(f"Error creating dir: {e}")
 
-# ==========================================
-# تهيئة البوت (in_memory لتجنب مشاكل الملفات)
-# ==========================================
 app = Client(
     "my_pdf_bot", 
     api_id=API_ID, 
@@ -34,24 +30,37 @@ app = Client(
 
 def compress_pdf(input_path, output_path):
     try:
+        # استخدام /screen لتقليل استهلاك الذاكرة بشكل كبير
+        # وإضافة -dDetectDuplicateImages=true لتقليل الحجم
         command = [
             "gs",
             "-sDEVICE=pdfwrite",
             "-dCompatibilityLevel=1.4",
-            "-dPDFSETTINGS=/ebook",
+            "-dPDFSETTINGS=/screen",  # أقل جودة وأقل استهلاكاً للذاكرة
             "-dNOPAUSE",
             "-dQUIET",
             "-dBATCH",
+            "-dDetectDuplicateImages=true",
             f"-sOutputFile={output_path}",
             input_path
         ]
-        # تشغيل الأمر
-        result = subprocess.run(command, check=True, capture_output=True, text=True, timeout=300)
+        
+        # تشغيل الأمر وتسجيل أي مخرجات من Ghostscript
+        result = subprocess.run(command, capture_output=True, text=True, timeout=300)
+        
+        # التحقق مما إذا كان هناك خطأ في مخرجات الأمر حتى لو لم ينهَ البرنامج بخطأ
+        if result.returncode != 0:
+            print(f"Ghostscript failed with code {result.returncode}")
+            print(f"Stderr: {result.stderr}")
+            print(f"Stdout: {result.stdout}")
+            return False
+            
         return True
     except subprocess.TimeoutExpired:
+        print("Error: Compression timed out")
         return False
     except Exception as e:
-        print(f"Compression Error: {e}")
+        print(f"Compression Exception: {e}")
         return False
 
 @app.on_message(filters.document & ~filters.forwarded)
@@ -59,40 +68,34 @@ async def handle_pdf(client: Client, message: Message):
     try:
         doc = message.document
         
-        # التحقق من نوع الملف
         if not doc.file_name.endswith(".pdf"):
             await message.reply("❌ هذا البوت لضغط ملفات PDF فقط.")
             return
 
-        # رسالة البدء
         status_msg = await message.reply("⏳ جاري بدء العملية...")
         
-        # إنشاء أسماء فريدة للملفات المؤقتة باستخدام uuid و time
-        # هذا يحل مشكلة message_id
         random_id = str(uuid.uuid4())[:8]
         input_pdf = os.path.join(TEMP_DIR, f"in_{random_id}.pdf")
         output_pdf = os.path.join(TEMP_DIR, f"out_{random_id}.pdf")
 
         # 1. التحميل
         await status_msg.edit("📥 جاري تحميل الملف...")
-        
         try:
             await message.download(file_name=input_pdf)
         except Exception as e:
             await status_msg.edit(f"❌ فشل التحميل: {str(e)}")
             return
 
-        # التأكد من وجود الملف
         if not os.path.exists(input_pdf) or os.path.getsize(input_pdf) == 0:
-            await status_msg.edit("❌ الملف فارغ أو لم يتم تحميله بشكل صحيح.")
+            await status_msg.edit("❌ الملف فارغ.")
             return
 
         # 2. الضغط
-        await status_msg.edit("⚙️ جاري ضغط الملف (قد يستغرق وقتاً)...")
+        await status_msg.edit("⚙️ جاري الضغط (جاري تقليل الجودة لتوفير الذاكرة)...")
         success = compress_pdf(input_pdf, output_pdf)
         
         if not success:
-            await status_msg.edit("❌ فشلت عملية الضغط.")
+            await status_msg.edit("❌ فشلت عملية الضغط. قد يكون الملف كبيراً جداً لذاكرة السيرفر المجانية.")
             return
 
         # 3. الإرسال
@@ -110,14 +113,12 @@ async def handle_pdf(client: Client, message: Message):
     except FloodWait as e:
         await asyncio.sleep(e.x)
     except Exception as e:
-        # إرسال الخطأ للمستخدم
         try:
             await message.reply(f"🚨 خطأ: {str(e)}")
         except:
             pass
         print(f"Error: {e}")
     finally:
-        # التنظيف
         for f in [input_pdf, output_pdf]:
             if os.path.exists(f):
                 try:
