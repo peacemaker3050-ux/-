@@ -1,6 +1,5 @@
 import os
 import subprocess
-import time
 import asyncio
 import uuid
 from pyrogram import Client, filters
@@ -17,8 +16,8 @@ BOT_TOKEN = os.environ.get("BOT_TOKEN", "")
 TEMP_DIR = "/tmp/bot_work"
 try:
     os.makedirs(TEMP_DIR, exist_ok=True)
-except Exception as e:
-    print(f"Error creating dir: {e}")
+except:
+    pass
 
 app = Client(
     "my_pdf_bot", 
@@ -30,41 +29,29 @@ app = Client(
 
 def compress_pdf(input_path, output_path):
     try:
-        # استخدام /screen لتقليل استهلاك الذاكرة بشكل كبير
-        # وإضافة -dDetectDuplicateImages=true لتقليل الحجم
         command = [
             "gs",
             "-sDEVICE=pdfwrite",
             "-dCompatibilityLevel=1.4",
-            "-dPDFSETTINGS=/screen",  # أقل جودة وأقل استهلاكاً للذاكرة
+            "-dPDFSETTINGS=/ebook",
             "-dNOPAUSE",
             "-dQUIET",
             "-dBATCH",
-            "-dDetectDuplicateImages=true",
             f"-sOutputFile={output_path}",
             input_path
         ]
-        
-        # تشغيل الأمر وتسجيل أي مخرجات من Ghostscript
         result = subprocess.run(command, capture_output=True, text=True, timeout=300)
-        
-        # التحقق مما إذا كان هناك خطأ في مخرجات الأمر حتى لو لم ينهَ البرنامج بخطأ
-        if result.returncode != 0:
-            print(f"Ghostscript failed with code {result.returncode}")
-            print(f"Stderr: {result.stderr}")
-            print(f"Stdout: {result.stdout}")
-            return False
-            
         return True
-    except subprocess.TimeoutExpired:
-        print("Error: Compression timed out")
-        return False
     except Exception as e:
-        print(f"Compression Exception: {e}")
+        print(f"Compression Error: {e}")
         return False
 
 @app.on_message(filters.document & ~filters.forwarded)
 async def handle_pdf(client: Client, message: Message):
+    # تعريف المتغيرات في البداية لتجنب UnboundLocalError
+    input_pdf = None
+    output_pdf = None
+    
     try:
         doc = message.document
         
@@ -91,11 +78,11 @@ async def handle_pdf(client: Client, message: Message):
             return
 
         # 2. الضغط
-        await status_msg.edit("⚙️ جاري الضغط (جاري تقليل الجودة لتوفير الذاكرة)...")
+        await status_msg.edit("⚙️ جاري الضغط...")
         success = compress_pdf(input_pdf, output_pdf)
         
         if not success:
-            await status_msg.edit("❌ فشلت عملية الضغط. قد يكون الملف كبيراً جداً لذاكرة السيرفر المجانية.")
+            await status_msg.edit("❌ فشلت عملية الضغط (تأكد من تثبيت Ghostscript).")
             return
 
         # 3. الإرسال
@@ -119,8 +106,9 @@ async def handle_pdf(client: Client, message: Message):
             pass
         print(f"Error: {e}")
     finally:
+        # التنظيف الآمن
         for f in [input_pdf, output_pdf]:
-            if os.path.exists(f):
+            if f and os.path.exists(f):
                 try:
                     os.remove(f)
                 except:
