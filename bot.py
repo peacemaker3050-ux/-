@@ -28,44 +28,45 @@ def compress_pdf(input_path, output_path, mode="standard"):
             "-sDEVICE=pdfwrite",
             "-dCompatibilityLevel=1.4",
             "-dNOPAUSE",
-            "-dQUIET",
+            "-dQUIET",           # صامت تماماً (لا يطبع شيئاً)
             "-dBATCH",
+            "-dNumRenderingThreads=2", # 🔥 استخدام نواتين للمعالجة لتسريع العملية
             f"-sOutputFile={output_path}",
         ]
 
         if mode == "standard":
-            # الوضع القياسي للكتب المصورة: تحويل للرمادي + تقليل دقة
+            # نفس إعدادات الجودة التي أعجبتك تماماً
             command.extend([
-                "-dPDFSETTINGS=/screen", # سريع نسبياً
+                "-dPDFSETTINGS=/screen",
                 "-sColorConversionStrategy=Gray",
                 "-dProcessColorModel=/DeviceGray",
                 "-dDownsampleColorImages=true",
-                "-dColorImageResolution=96", # خفضناها قليلاً (من 100 إلى 96) للمساعدة في السرعة والحجم
+                "-dColorImageResolution=96",
                 "-dDownsampleGrayImages=true",
-                "-dGrayImageResolution=120", # خفضناها قليلاً (من 150 إلى 120) لزيادة السرعة وتقليل الحجم
+                "-dGrayImageResolution=120",
                 "-dAutoFilterColorImages=false",
                 "-dAutoFilterGrayImages=false",
                 input_path
             ])
         elif mode == "aggressive":
-            # الوضع العدواني للوصول لـ 20 ميجا: جودة شاشة مع إعادة ضبط الصور (Resampling)
+            # نفس إعدادات الضغط القوي للوصول لـ 20 ميجا
             command.extend([
-                "-dPDFSETTINGS=/screen", # أسرع وضع
+                "-dPDFSETTINGS=/screen",
                 "-sColorConversionStrategy=Gray",
                 "-dProcessColorModel=/DeviceGray",
-                # تقليل حاد للدقة لضمان الوصول للهدف
                 "-dDownsampleColorImages=true",
-                "-dColorImageResolution=72", 
+                "-dColorImageResolution=72",
                 "-dDownsampleGrayImages=true",
                 "-dGrayImageResolution=96",
-                # هذه الأوامر تجعل Ghostscript يعيد معالجة الصور لتقليل "الضجيج" وتقليل الحجم
                 "-dAutoFilterColorImages=true",
                 "-dAutoFilterGrayImages=true",
-                "-dDetectDuplicateImages=true", # حذف الصور المكررة (مهم جداً في الكتب)
+                "-dDetectDuplicateImages=true",
                 input_path
             ])
 
-        result = subprocess.run(command, capture_output=True, text=True, timeout=400)
+        # التغيير الأهم: استخدام stdout/stderr مباشرة بدلاً من capture_output
+        # هذا يمنع البرنامج من حجز الذاكرة لتخزين السجلات ويسرع العملية
+        result = subprocess.run(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=400)
         return result.returncode == 0
     except Exception as e:
         print(f"Compression Error: {e}")
@@ -99,11 +100,11 @@ async def handle_pdf(client: Client, message: Message):
             return
 
         # ==========================================
-        # حلقة التكرار
+        # حلقة التكرار (نفس المنطق السابق)
         # ==========================================
         current_file = original_file
         attempts = 0
-        max_attempts = 2 # قللنا المحاولات إلى 2 فقط للسرعة
+        max_attempts = 2 
         target_size_mb = 20
         
         while attempts < max_attempts:
@@ -114,11 +115,11 @@ async def handle_pdf(client: Client, message: Message):
                 break
 
             if attempts == 1:
-                use_mode = "standard" # المحاولة الأولى: متوازنة
-                msg_text = "⚙️ جاري الضغط (المحاولة 1: جودة متوسطة)..."
+                use_mode = "standard"
+                msg_text = "⚙️ جاري الضغط السريع..."
             else:
-                use_mode = "aggressive" # المحاولة الثانية: الوصول للهدف بأي ثمن
-                msg_text = "⏳ الحجم لا يزال كبيراً.. جاري الضغط السريع للوصول لـ 20 ميجا..."
+                use_mode = "aggressive"
+                msg_text = "⏳ جاري الوصول للحد المسموح (20 ميجا)..."
 
             await status_msg.edit(msg_text)
             
@@ -142,7 +143,7 @@ async def handle_pdf(client: Client, message: Message):
         if final_size_mb <= target_size_mb:
             caption = f"✅ تم الضغط للهدف!\n📉 من {original_size_mb:.1f} MB إلى {final_size_mb:.1f} MB"
         else:
-            caption = f"⚠️ تم الضغط للحد الأقصى الممكن.\n📉 من {original_size_mb:.1f} MB إلى {final_size_mb:.1f} MB"
+            caption = f"⚠️ تم الضغط للحد الأقصى.\n📉 من {original_size_mb:.1f} MB إلى {final_size_mb:.1f} MB"
 
         await message.reply_document(current_file, caption=caption)
         await status_msg.delete()
