@@ -22,11 +22,6 @@ except Exception as e:
 app = Client("my_pdf_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
 
 def compress_pdf(input_path, output_path, mode="standard"):
-    """
-    دالة الضغط:
-    mode='standard': للملفات النصية العادية.
-    mode='scanned': للكتب المصورة (تلوين بالأبيض والأسود لتقليل الحجم).
-    """
     try:
         command = [
             "gs",
@@ -39,23 +34,34 @@ def compress_pdf(input_path, output_path, mode="standard"):
         ]
 
         if mode == "standard":
-            # إعدادات الكتب العادية (نصوص + صور ملونة قليلة)
+            # الوضع القياسي للكتب المصورة: تحويل للرمادي + تقليل دقة
             command.extend([
-                "-dPDFSETTINGS=/ebook",
-                input_path
-            ])
-        elif mode == "scanned":
-            # إعدادات الكتب المصورة (السحر هنا!)
-            command.extend([
-                "-dPDFSETTINGS=/screen", # جودة مناسبة للشاشة
-                "-sColorConversionStrategy=Gray", # تحويل كل الألوان إلى تدرجات رمادي (يقلل الحجم بنسبة 50% فوراً)
-                "-dProcessColorModel=/DeviceGray", # إجبار المعالجة بالرمادي
+                "-dPDFSETTINGS=/screen", # سريع نسبياً
+                "-sColorConversionStrategy=Gray",
+                "-dProcessColorModel=/DeviceGray",
                 "-dDownsampleColorImages=true",
-                "-dColorImageResolution=100", # تقليل دقة الصور الملونة إلى 100dpi (كافٍ جداً للقراءة)
+                "-dColorImageResolution=96", # خفضناها قليلاً (من 100 إلى 96) للمساعدة في السرعة والحجم
                 "-dDownsampleGrayImages=true",
-                "-dGrayImageResolution=150", # دقة 150 للصور الرمادية (واضحة)
+                "-dGrayImageResolution=120", # خفضناها قليلاً (من 150 إلى 120) لزيادة السرعة وتقليل الحجم
                 "-dAutoFilterColorImages=false",
                 "-dAutoFilterGrayImages=false",
+                input_path
+            ])
+        elif mode == "aggressive":
+            # الوضع العدواني للوصول لـ 20 ميجا: جودة شاشة مع إعادة ضبط الصور (Resampling)
+            command.extend([
+                "-dPDFSETTINGS=/screen", # أسرع وضع
+                "-sColorConversionStrategy=Gray",
+                "-dProcessColorModel=/DeviceGray",
+                # تقليل حاد للدقة لضمان الوصول للهدف
+                "-dDownsampleColorImages=true",
+                "-dColorImageResolution=72", 
+                "-dDownsampleGrayImages=true",
+                "-dGrayImageResolution=96",
+                # هذه الأوامر تجعل Ghostscript يعيد معالجة الصور لتقليل "الضجيج" وتقليل الحجم
+                "-dAutoFilterColorImages=true",
+                "-dAutoFilterGrayImages=true",
+                "-dDetectDuplicateImages=true", # حذف الصور المكررة (مهم جداً في الكتب)
                 input_path
             ])
 
@@ -97,7 +103,7 @@ async def handle_pdf(client: Client, message: Message):
         # ==========================================
         current_file = original_file
         attempts = 0
-        max_attempts = 3 
+        max_attempts = 2 # قللنا المحاولات إلى 2 فقط للسرعة
         target_size_mb = 20
         
         while attempts < max_attempts:
@@ -107,27 +113,17 @@ async def handle_pdf(client: Client, message: Message):
             if current_size_mb <= target_size_mb:
                 break
 
-            # سنستخدم وضع "scanned" (المصور) في المحاولة الأولى لأن معظم ملفاتك كتب مصورة
-            # وإذا فشل ننتقل لوضع أقوى
-            
             if attempts == 1:
-                use_mode = "scanned" # محاولة ضغط الكتب المصورة (تقليل الألوان)
-                msg_text = "⚙️ جاري معالجة الكتاب المصور (تحويل للأبيض والأسود)..."
-            elif attempts == 2:
-                use_mode = "scanned" # محاولة ثانية بتقنية أخرى (تم دمجها في الدالة)
-                # في المحاولة الثانية سنغير بعض الإعدادات يدوياً للكود أدناه إذا لزم الأمر
-                # لكن سنعتمد على دالة scanned المتكررة لأنها قوية
-                msg_text = "⚙️ جاري زيادة الضغط (تقليل دقة الصور)..."
+                use_mode = "standard" # المحاولة الأولى: متوازنة
+                msg_text = "⚙️ جاري الضغط (المحاولة 1: جودة متوسطة)..."
             else:
-                use_mode = "scanned" # نفس الوضع لكن سنتخيل أننا نضغط أكثر
-                msg_text = "⚙️ محاولة أخيرة للوصول للحجم المطلوب..."
+                use_mode = "aggressive" # المحاولة الثانية: الوصول للهدف بأي ثمن
+                msg_text = "⏳ الحجم لا يزال كبيراً.. جاري الضغط السريع للوصول لـ 20 ميجا..."
 
             await status_msg.edit(msg_text)
             
             next_file = os.path.join(TEMP_DIR, f"comp_{random_id}_run{attempts}.pdf")
             
-            # هنا يمكننا تغيير الـ mode بناءً على المحاولة إذا أردنا
-            # حالياً نستخدم scanned لضمان جودة النص المكتوب بخط اليد
             success = compress_pdf(current_file, next_file, mode=use_mode)
             
             if success and os.path.exists(next_file):
@@ -144,9 +140,9 @@ async def handle_pdf(client: Client, message: Message):
         original_size_mb = os.path.getsize(original_file) / (1024 * 1024)
 
         if final_size_mb <= target_size_mb:
-            caption = f"✅ تم الضغط!\n📉 من {original_size_mb:.1f} MB إلى {final_size_mb:.1f} MB\n📷 تم تحسين الملف للقراءة."
+            caption = f"✅ تم الضغط للهدف!\n📉 من {original_size_mb:.1f} MB إلى {final_size_mb:.1f} MB"
         else:
-            caption = f"⚠️ تم الضغط.\n📉 من {original_size_mb:.1f} MB إلى {final_size_mb:.1f} MB"
+            caption = f"⚠️ تم الضغط للحد الأقصى الممكن.\n📉 من {original_size_mb:.1f} MB إلى {final_size_mb:.1f} MB"
 
         await message.reply_document(current_file, caption=caption)
         await status_msg.delete()
