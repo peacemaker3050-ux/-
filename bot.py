@@ -21,9 +21,9 @@ except Exception as e:
 
 app = Client("my_pdf_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
 
-def compress_pdf(input_path, output_path, quality_setting="/ebook"):
+def compress_pdf(input_path, output_path, quality_setting="/ebook", custom_filter=None):
     """
-    دالة الضغط مع تحديد مستوى الجودة
+    دالة الضغط مع إمكانية تمرير فلتر مخصص لتقليل الدقة
     """
     try:
         command = [
@@ -35,8 +35,23 @@ def compress_pdf(input_path, output_path, quality_setting="/ebook"):
             "-dQUIET",
             "-dBATCH",
             f"-sOutputFile={output_path}",
-            input_path
         ]
+        
+        # إذا تم إرسال فلتر مخصص (مثل تقليل الدقة)، أضفه للأمر
+        if custom_filter:
+            command.append(f"-sDEVICE=pdfwrite")
+            command.append(f"-dPDFSETTINGS={quality_setting}")
+            # هذا الفلتر يقلل دقة الصور إلى 72 dpi (جيدة للشاشة) ويحافظ على الخطوط
+            command.append(f"-dDownsampleColorImages=true")
+            command.append(f"-dColorImageResolution=72") # يمكنك تغيير 72 إلى 96 أو 150 إذا أردت جودة أعلى
+            command.append(f"-dDownsampleGrayImages=true")
+            command.append(f"-dGrayImageResolution=72")
+            command.append(f"-dDownsampleMonoImages=true")
+            command.append(f"-dMonoImageResolution=72")
+            command.append(input_path)
+        else:
+            command.append(input_path)
+
         result = subprocess.run(command, capture_output=True, text=True, timeout=300)
         return result.returncode == 0
     except Exception as e:
@@ -46,7 +61,6 @@ def compress_pdf(input_path, output_path, quality_setting="/ebook"):
 @app.on_message(filters.document & ~filters.forwarded)
 async def handle_pdf(client: Client, message: Message):
     current_file = None
-    output_file = None
     
     try:
         doc = message.document
@@ -56,7 +70,6 @@ async def handle_pdf(client: Client, message: Message):
 
         status_msg = await message.reply("⏳ جاري بدء العملية...")
         
-        # مسار الملف الأصلي
         random_id = str(uuid.uuid4())[:8]
         original_file = os.path.join(TEMP_DIR, f"org_{random_id}.pdf")
         
@@ -73,59 +86,60 @@ async def handle_pdf(client: Client, message: Message):
             return
 
         # ==========================================
-        # حلقة التكرار الذكية للضغط المتعدد
+        # حلقة التكرار الذكية
         # ==========================================
         current_file = original_file
         attempts = 0
-        max_attempts = 3  # سنحاول الضغط 3 مرات كحد أقصى
+        max_attempts = 3 
         target_size_mb = 20
         
         while attempts < max_attempts:
             attempts += 1
             current_size_mb = os.path.getsize(current_file) / (1024 * 1024)
             
-            # التحقق: هل وصلنا للحجم المطلوب؟
             if current_size_mb <= target_size_mb:
                 break
 
-            # تحديد جودة الضغط (تقليل الجودة في كل مرة)
             if attempts == 1:
-                quality = "/ebook"      # محاولة أولى (جودة جيدة)
-                msg_text = "⚙️ جاري الضغط (المحاولة 1)..."
+                # المحاولة الأولى: ضغط قياسي مع الحفاظ على الدقة الأصلية
+                quality = "/ebook"
+                use_filter = False
+                msg_text = "⚙️ جاري الضغط (جودة عالية)..."
             elif attempts == 2:
-                quality = "/screen"     # محاولة ثانية (جودة أقل وحجم أصغر)
-                msg_text = "⚙️ الحجم لا يزال كبيراً.. جاري الضغط مرة أخرى (المحاولة 2)..."
+                # المحاولة الثانية: الحل الجديد! ضغط بتقليل دقة الصور (حفظ الخطوط)
+                quality = "/prepress" # جودة عالية جداً للطباعة ولكن سنخفض الدقة بالفلتر
+                use_filter = True
+                msg_text = "⚙️ جاري تقليل الحجم مع الحفاظ على جودة النصوص (المحاولة 2)..."
             else:
-                quality = "/screen"     # محاولة ثالثة قصوى
-                msg_text = "⚙️ محاولة أخيرة للضغط الشديد (المحاولة 3)..."
+                # المحاولة الثالثة: تدخل منطقة الخطورة
+                quality = "/screen"
+                use_filter = False
+                msg_text = "⚙️ محاولة أخيرة للضغط الشديد..."
 
             await status_msg.edit(msg_text)
             
-            # إنشاء اسم للملف الجديد
             next_file = os.path.join(TEMP_DIR, f"comp_{random_id}_run{attempts}.pdf")
             
-            # عملية الضغط
-            success = compress_pdf(current_file, next_file, quality_setting=quality)
+            # تمرير الفلتر فقط في المحاولة الثانية
+            success = compress_pdf(current_file, next_file, quality_setting=quality, custom_filter=use_filter)
             
             if success and os.path.exists(next_file):
-                # إذا نجح الضغط، نحذف الملف القديم ونستخدم الجديد كمرحلة تالية
                 if current_file != original_file:
                     os.remove(current_file)
                 current_file = next_file
             else:
-                # إذا فشلت محاولة الضغط، نوقف المحاولات ونرسل الملف الحالي
                 break
 
         # ==========================================
-        # النتيجة النهائية
+        # النتيجة
         # ==========================================
         final_size_mb = os.path.getsize(current_file) / (1024 * 1024)
         original_size_mb = os.path.getsize(original_file) / (1024 * 1024)
 
         if final_size_mb <= target_size_mb:
-            caption = f"✅ نجح الضغط!\n📉 من {original_size_mb:.1f} MB إلى {final_size_mb:.1f} MB"
+            caption = f"✅ تم الضغط بنجاح!\n📉 من {original_size_mb:.1f} MB إلى {final_size_mb:.1f} MB\n✨ تم الحفاظ على جودة النصوص."
         else:
-            caption = f"⚠️ تم الضغط قدر الإمكان.\n📉 من {original_size_mb:.1f} MB إلى {final_size_mb:.1f} MB\n(الملف معقد ولا يمكن الوصول لأقل من 20 ميجا)"
+            caption = f"⚠️ تم الضغط قدر الإمكان.\n📉 من {original_size_mb:.1f} MB إلى {final_size_mb:.1f} MB"
 
         await message.reply_document(current_file, caption=caption)
         await status_msg.delete()
@@ -139,14 +153,12 @@ async def handle_pdf(client: Client, message: Message):
             pass
         print(f"Error: {e}")
     finally:
-        # تنظيف الملفات المؤقتة
+        # تنظيف
         files_to_clean = [original_file, current_file]
-        # ملاحظة: المتغير current_file قد يشير لأحد الملفات الوسيطة
         cleaned_paths = set()
         for f in files_to_clean:
             if f and os.path.exists(f):
                 cleaned_paths.add(f)
-        
         for f in cleaned_paths:
             try:
                 os.remove(f)
