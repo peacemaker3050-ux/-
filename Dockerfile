@@ -1,9 +1,8 @@
 # استخدام صورة بايثون خفيفة
-FROM python:3.9-slim
+FROM python:3.11-slim
 
-# تحديث النظام وتثبيت Ghostscript والملفات الأساسية
+# تحديث النظام
 RUN apt-get update && apt-get install -y \
-    ghostscript \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
