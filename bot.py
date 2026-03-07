@@ -1057,10 +1057,73 @@ async def check_new_files():
         except Exception as e:
             print(f"New Files Watcher Error: {e}")
 
+async def check_new_poll():
+    """
+    Watches for new active polls every 30 seconds.
+    When a new poll detected → sends FCM push to all users.
+    """
+    print("🗳️ Poll Watcher Active: Checking every 30 seconds.")
+    import time
+    last_poll_id = None
+
+    while True:
+        await asyncio.sleep(30)
+        try:
+            db = await get_database(force_refresh=True)
+            poll = db.get('activePoll')
+            if not poll or poll.get('ended', False):
+                continue
+            poll_id = str(poll.get('question', '')) + str(poll.get('endsAt', 0))
+            ends_at_ms = poll.get('endsAt', 0)
+            remaining_s = max(0, int((ends_at_ms - time.time() * 1000) / 1000))
+            if poll_id != last_poll_id and remaining_s > 0:
+                print(f"🗳️ New poll detected: {poll.get('question', '')}")
+                await send_push_notification(
+                    "🗳️ New Poll — Vote Now!",
+                    poll.get('question', 'A new poll is waiting for your vote')
+                )
+                last_poll_id = poll_id
+        except Exception as e:
+            print(f"Poll Watcher Error: {e}")
+
+
+async def check_new_quicklinks():
+    """
+    Watches for new quick links every 30 seconds.
+    When a new link detected → sends FCM push to all users.
+    """
+    print("🔗 Quick Links Watcher Active: Checking every 30 seconds.")
+    last_count = -1
+
+    while True:
+        await asyncio.sleep(30)
+        try:
+            db = await get_database(force_refresh=True)
+            links = db.get('quickLinks', [])
+            if not isinstance(links, list):
+                links = []
+            count = len(links)
+            if last_count == -1:
+                last_count = count
+                continue
+            if count > last_count:
+                new_link = links[-1]
+                print(f"🔗 New quick link: {new_link.get('title', '')}")
+                await send_push_notification(
+                    "🔗 New Link Added",
+                    new_link.get('title', 'A new link is now available')
+                )
+            last_count = count
+        except Exception as e:
+            print(f"Quick Links Watcher Error: {e}")
+
+
 async def main():
     await start_web_server()
     asyncio.create_task(check_schedules())
     asyncio.create_task(check_new_files())
+    asyncio.create_task(check_new_poll())
+    asyncio.create_task(check_new_quicklinks())
     print("🤖 Bot is starting...")
     await app.start()
     await set_bot_commands()
