@@ -104,10 +104,14 @@ async def get_database(force_refresh=False):
             async with session.get(f"{FIREBASE_DB_URL}/.json") as resp:
                 if resp.status == 200:
                     raw = await resp.json()
-                    if raw and isinstance(raw.get('data'), str):
-                        db_cache = json.loads(raw['data'])
-                    else:
-                        db_cache = raw if raw else {"database": {}}
+                    # Unwrap nested data strings (handles multiple save layers)
+                    parsed = raw
+                    while parsed and isinstance(parsed.get('data'), str):
+                        try: parsed = json.loads(parsed['data'])
+                        except: break
+                    if parsed and isinstance(parsed.get('data'), dict):
+                        parsed = parsed['data']
+                    db_cache = parsed if parsed else {"database": {}}
                     last_cache_time = now
                     return db_cache
     except Exception as e:
@@ -119,7 +123,7 @@ async def save_database(data):
     try:
         async with aiohttp.ClientSession() as session:
             async with session.put(
-                f"{FIREBASE_DB_URL}/.json",
+                f"{FIREBASE_DB_URL}/db.json",
                 json={"data": json.dumps(data, ensure_ascii=False)},
                 headers={'Content-Type': 'application/json'}
             ) as resp:
