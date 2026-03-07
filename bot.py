@@ -123,16 +123,17 @@ async def save_database(data):
     try:
         async with aiohttp.ClientSession() as session:
             async with session.put(
-                f"{FIREBASE_DB_URL}/db.json",
+                f"{FIREBASE_DB_URL}/.json",
                 json={"data": json.dumps(data, ensure_ascii=False)},
                 headers={'Content-Type': 'application/json'}
             ) as resp:
+                body = await resp.text()
                 if resp.status == 200:
                     db_cache = data
                     last_cache_time = datetime.now().timestamp()
                     return True
                 else:
-                    print(f"DB Save Failed with status: {resp.status}")
+                    print(f"DB Save Failed — status: {resp.status}, body: {body}")
                     return False
     except Exception as e:
         print(f"DB Save Error: {e}")
@@ -426,7 +427,12 @@ async def handle_file(client, message):
 
     # ── عرض قائمة المواد فوراً بدون انتظار التنزيل ──
     db = await get_database(force_refresh=True)
+    print(f"[DEBUG] DB top-level keys: {list(db.keys())}")
+    print(f"[DEBUG] database subjects: {list(db.get('database', {}).keys())}")
     subjects = list(db.get('database', {}).keys())
+    if not subjects:
+        await message.reply("❌ No subjects found in database. Check Firebase.")
+        return
     keyboard = [[InlineKeyboardButton(sub, callback_data=f"sub_{sub}")] for sub in subjects]
 
     status_msg = await message.reply(
@@ -503,6 +509,10 @@ async def handle_text(client, message):
         }
         db = await get_database()
         subjects = list(db.get('database', {}).keys())
+        if not subjects:
+            await message.reply("❌ No subjects found in database.")
+            del user_states[chat_id]
+            return
         keyboard = [[InlineKeyboardButton(sub, callback_data=f"sub_{sub}")] for sub in subjects]
         await message.reply(
             f"📢 New Notification:\n\"{text}\"\n\nSelect Subject:",
