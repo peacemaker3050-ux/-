@@ -26,9 +26,8 @@ CLIENT_SECRET = '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'
 REFRESH_TOKEN = '1//03SEUMCBTjt1CCgYIARAAGAMSNwF-L9IrecuL1Xr9zf0RZ1b_mGyIP3_hVeJC-IfIWHrpO_knI6JYsgppYXDPnp2pjniVfbeiP2A'
 ROOT_FOLDER_NAME = '2nd MEC 2026'
 
-# إعدادات JSONBin
-JSONBIN_BIN_ID = "696e77bfae596e708fe71e9d"
-JSONBIN_ACCESS_KEY = "$2a$10$TunKuA35QdJp478eIMXxRunQfqgmhDY3YAxBXUXuV/JrgIFhU0Lf2"
+# إعدادات Firebase Realtime Database
+FIREBASE_DB_URL = "https://libirary-b2424-default-rtdb.firebaseio.com"
 
 # المستخدمين المصرح لهم
 AUTHORIZED_USERS = [5605597142, 5797320196, 6732616473, 5741332811, 5978595535]
@@ -102,10 +101,10 @@ async def get_database(force_refresh=False):
         return db_cache
     try:
         async with aiohttp.ClientSession() as session:
-            headers = {'X-Master-Key': JSONBIN_ACCESS_KEY, 'X-Bin-Meta': 'false'}
-            async with session.get(f"https://api.jsonbin.io/v3/b/{JSONBIN_BIN_ID}/latest", headers=headers) as resp:
+            async with session.get(f"{FIREBASE_DB_URL}/db.json") as resp:
                 if resp.status == 200:
-                    db_cache = await resp.json()
+                    data = await resp.json()
+                    db_cache = data if data else {"database": {}}
                     last_cache_time = now
                     return db_cache
     except Exception as e:
@@ -116,8 +115,11 @@ async def save_database(data):
     global db_cache, last_cache_time
     try:
         async with aiohttp.ClientSession() as session:
-            headers = {'Content-Type': 'application/json', 'X-Master-Key': JSONBIN_ACCESS_KEY}
-            async with session.put(f"https://api.jsonbin.io/v3/b/{JSONBIN_BIN_ID}", json=data, headers=headers) as resp:
+            async with session.put(
+                f"{FIREBASE_DB_URL}/db.json",
+                json=data,
+                headers={'Content-Type': 'application/json'}
+            ) as resp:
                 if resp.status == 200:
                     db_cache = data
                     last_cache_time = datetime.now().timestamp()
