@@ -101,7 +101,7 @@ async def get_database(force_refresh=False):
         return db_cache
     try:
         async with aiohttp.ClientSession() as session:
-            async with session.get(f"{FIREBASE_DB_URL}/db.json") as resp:
+            async with session.get(f"{FIREBASE_DB_URL}/.json") as resp:
                 if resp.status == 200:
                     raw = await resp.json()
                     if raw and isinstance(raw.get('data'), str):
@@ -119,7 +119,7 @@ async def save_database(data):
     try:
         async with aiohttp.ClientSession() as session:
             async with session.put(
-                f"{FIREBASE_DB_URL}/db.json",
+                f"{FIREBASE_DB_URL}/.json",
                 json={"data": json.dumps(data, ensure_ascii=False)},
                 headers={'Content-Type': 'application/json'}
             ) as resp:
