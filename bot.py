@@ -207,8 +207,12 @@ async def send_push_notification(title, body):
         try:
             if not db_cache or 'userTokens' not in db_cache: return
             tokens = []
-            for t_list in db_cache['userTokens'].values():
-                tokens.extend(t_list)
+            for user_data in db_cache['userTokens'].values():
+                # Support both old format (list) and new format (dict with tokens key)
+                if isinstance(user_data, list):
+                    tokens.extend(user_data)
+                elif isinstance(user_data, dict):
+                    tokens.extend(user_data.get('tokens', []))
             if not tokens:
                 print("FCM: No tokens found, skipping notification.")
                 return
@@ -224,6 +228,44 @@ async def send_push_notification(title, body):
             print(f"FCM Sent: {success} success, {failure} failure")
         except Exception as e:
             print(f"FCM Error: {e}")
+    await loop.run_in_executor(None, _send)
+
+
+async def send_push_new_files(title, body):
+    """
+    ✅ إشعارات الملفات الجديدة — بتبعت بس للمستخدمين اللي فعّلوا newFilesEnabled=true
+    """
+    loop = asyncio.get_running_loop()
+    def _send():
+        try:
+            if not db_cache or 'userTokens' not in db_cache: return
+            tokens = []
+            user_tokens_data = db_cache['userTokens']
+            for email_key, user_data in user_tokens_data.items():
+                # Check if user enabled new files notifications
+                if isinstance(user_data, dict):
+                    enabled = user_data.get('newFilesEnabled', False)
+                    token_list = user_data.get('tokens', [])
+                    if enabled and token_list:
+                        tokens.extend(token_list)
+                elif isinstance(user_data, list):
+                    # Old format — no preference stored, skip
+                    pass
+            if not tokens:
+                print("FCM New Files: No opted-in tokens found, skipping.")
+                return
+            messages = [
+                messaging.Message(
+                    notification=messaging.Notification(title=title, body=body),
+                    token=token
+                ) for token in tokens
+            ]
+            response = messaging.send_each(messages)
+            success = sum(1 for r in response.responses if r.success)
+            failure = len(response.responses) - success
+            print(f"FCM New Files Sent: {success} success, {failure} failure")
+        except Exception as e:
+            print(f"FCM New Files Error: {e}")
     await loop.run_in_executor(None, _send)
 
 # ==========================================
@@ -1046,8 +1088,8 @@ async def check_new_files():
 
             if newest_ts > last_seen_ts:
                 print(f"🆕 New file detected: {newest_name} ({newest_subject}) ts={newest_ts}")
-                await send_push_notification(
-                    f"New file   — {newest_subject}",
+                await send_push_new_files(
+                    f"📂 New file — {newest_subject}",
                     newest_name
                 )
                 last_seen_ts = newest_ts
@@ -1077,7 +1119,7 @@ async def check_new_poll():
             ends_at_ms = poll.get('endsAt', 0)
             remaining_s = max(0, int((ends_at_ms - time.time() * 1000) / 1000))
             if poll_id != last_poll_id and remaining_s > 0:
-                print(f"🗳️ New poll detected: {poll.get('question', '')}")
+                print(f"🗳️ New poll: {poll.get('question', '')}")
                 await send_push_notification(
                     "🗳️ New Poll — Vote Now!",
                     poll.get('question', 'A new poll is waiting for your vote')
