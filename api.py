@@ -29,7 +29,7 @@ CLIENT_ID     = '1006485502608-ok2u5i6nt6js64djqluithivsko4mnom.apps.googleuserc
 CLIENT_SECRET = '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'
 REFRESH_TOKEN = '1//03SEUMCBTjt1CCgYIARAAGAMSNwF-L9IrecuL1Xr9zf0RZ1b_mGyIP3_hVeJC-IfIWHrpO_knI6JYsgppYXDPnp2pjniVfbeiP2A'
 
-RAILWAY_URL = "https://genuine-vision-production.up.railway.app"
+RAILWAY_URL = "https://web-production-b8f1c.up.railway.app"
 
 # ==========================================
 # 2. Firebase init
