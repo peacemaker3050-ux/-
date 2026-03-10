@@ -393,16 +393,87 @@ def new_files_watcher():
             print(f"New Files Watcher Error: {e}")
         time.sleep(60)
 
+# --- Schedules watcher ---
+def schedules_watcher():
+    import requests as req
+    print("⏰ Schedules Watcher started")
+    time.sleep(30)
+    while True:
+        try:
+            db = get_database_sync(force_refresh=True)
+            schedules = db.get('schedules', [])
+            if not isinstance(schedules, list):
+                schedules = []
+
+            now = datetime.now()
+            current_day  = now.weekday()  # 0=Monday ... 6=Sunday
+            current_time = now.strftime('%H:%M')
+            changed = False
+
+            for sched in schedules:
+                if not sched.get('active', False):
+                    continue
+                sched_day  = sched.get('day', -1)
+                sched_time = sched.get('time', '')
+                last_triggered = sched.get('lastTriggered', 0)
+
+                # Check day and time match
+                if sched_day != current_day:
+                    continue
+                if sched_time != current_time:
+                    continue
+
+                # Avoid sending twice in same minute
+                last_dt = datetime.fromtimestamp(last_triggered / 1000) if last_triggered else None
+                if last_dt and last_dt.date() == now.date() and last_dt.strftime('%H:%M') == current_time:
+                    continue
+
+                subject = sched.get('subject', '')
+                doctor  = sched.get('doctor', '')
+                message = sched.get('message', '')
+
+                print(f"⏰ Firing schedule: {subject} - {doctor}: {message}")
+                send_fcm_all(
+                    f"🔔 Reminder — {doctor} ({subject})",
+                    message
+                )
+
+                # Update lastTriggered
+                sched['lastTriggered'] = int(now.timestamp() * 1000)
+                changed = True
+
+            if changed:
+                # Save updated schedules back to Firebase
+                try:
+                    full_db = get_database_sync(force_refresh=True)
+                    full_db['schedules'] = schedules
+                    import json as _json
+                    req.put(
+                        f"{FIREBASE_DB_URL}/.json",
+                        json={'data': _json.dumps(full_db)},
+                        timeout=10
+                    )
+                    print("⏰ Schedules updated in Firebase")
+                except Exception as e:
+                    print(f"⏰ Schedule save error: {e}")
+
+        except Exception as e:
+            print(f"Schedules Watcher Error: {e}")
+        time.sleep(60)  # Check every minute
+
 # ==========================================
 # 10. Start
 # ==========================================
 def start_watchers():
-    threading.Thread(target=poll_watcher,       daemon=True).start()
-    threading.Thread(target=quicklinks_watcher, daemon=True).start()
-    threading.Thread(target=new_files_watcher,  daemon=True).start()
+    threading.Thread(target=poll_watcher,        daemon=True).start()
+    threading.Thread(target=quicklinks_watcher,  daemon=True).start()
+    threading.Thread(target=new_files_watcher,   daemon=True).start()
+    threading.Thread(target=schedules_watcher,   daemon=True).start()
+
+# Auto-start watchers when gunicorn loads the module
+start_watchers()
 
 if __name__ == '__main__':
-    start_watchers()
     port = int(os.environ.get('PORT', 8080))
     print(f"🚀 UniBot API running on port {port}")
     app_flask.run(host='0.0.0.0', port=port)
