@@ -199,25 +199,61 @@ def send_notification():
     success, failure = send_fcm_all(title, body)
     return jsonify({"success": success, "failure": failure})
 
+# --- Helper: get or create folder by name inside a parent ---
+def get_or_create_folder(service, name, parent_id):
+    # Search for existing folder
+    query = f"name='{name}' and '{parent_id}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false"
+    results = service.files().list(q=query, fields="files(id, name)").execute()
+    files = results.get('files', [])
+    if files:
+        print(f"📁 Found folder: {name} ({files[0]['id']})")
+        return files[0]['id']
+    # Create folder
+    metadata = {
+        'name': name,
+        'mimeType': 'application/vnd.google-apps.folder',
+        'parents': [parent_id]
+    }
+    folder = service.files().create(body=metadata, fields='id').execute()
+    print(f"📁 Created folder: {name} ({folder['id']})")
+    return folder['id']
+
 # --- Upload file to Google Drive ---
 @app_flask.route('/upload-file', methods=['POST'])
 def upload_file():
     if 'file' not in request.files:
         return jsonify({"error": "No file"}), 400
-    file    = request.files['file']
-    subject = request.form.get('subject', 'General')
-    doctor  = request.form.get('doctor', 'General')
-    folder  = request.form.get('folder', '')
-    notify  = request.form.get('notify', 'true') == 'true'
+    file        = request.files['file']
+    subject     = request.form.get('subject', '')
+    doctor      = request.form.get('doctor', '')
+    folder_path = request.form.get('folder_path', '')  # e.g. "Lectures/Week1"
+    notify      = request.form.get('notify', 'true') == 'true'
 
     try:
         service = get_drive_service()
+
+        # Navigate/create folder structure: Root → Subject → Doctor → [subfolders]
+        current_folder_id = DRIVE_FOLDER_ID
+
+        if subject:
+            current_folder_id = get_or_create_folder(service, subject, current_folder_id)
+        if doctor:
+            current_folder_id = get_or_create_folder(service, doctor, current_folder_id)
+
+        # Handle extra subfolders e.g. "Lectures/Week1"
+        if folder_path:
+            for part in folder_path.split('/'):
+                part = part.strip()
+                if part:
+                    current_folder_id = get_or_create_folder(service, part, current_folder_id)
+
+        # Upload file into the final folder
         file_content = file.read()
         file_stream  = io.BytesIO(file_content)
         media = MediaIoBaseUpload(file_stream, mimetype=file.mimetype, resumable=True)
         file_metadata = {
             'name': file.filename,
-            'parents': [DRIVE_FOLDER_ID]
+            'parents': [current_folder_id]
         }
         uploaded = service.files().create(
             body=file_metadata,
@@ -233,6 +269,8 @@ def upload_file():
 
         drive_link = uploaded.get('webViewLink', '')
         file_id    = uploaded.get('id', '')
+
+        print(f"✅ Uploaded: {file.filename} → {subject}/{doctor}/{folder_path}")
 
         # Send FCM if notify enabled
         if notify:
