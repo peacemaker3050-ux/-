@@ -508,7 +508,6 @@ def schedules_watcher():
 def start_watchers():
     threading.Thread(target=poll_watcher,        daemon=True).start()
     threading.Thread(target=quicklinks_watcher,  daemon=True).start()
-    threading.Thread(target=new_files_watcher,   daemon=True).start()
     threading.Thread(target=schedules_watcher,   daemon=True).start()
 
 # Auto-start watchers when gunicorn loads the module
