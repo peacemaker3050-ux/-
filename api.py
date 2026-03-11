@@ -111,6 +111,36 @@ def get_database_sync(force_refresh=False):
 # ==========================================
 # 6. Helper: send FCM to all tokens
 # ==========================================
+def clean_invalid_tokens(user_tokens, token_results, all_tokens):
+    """Remove invalid/expired tokens from Firebase"""
+    try:
+        import requests
+        invalid_tokens = set()
+        for i, result in enumerate(token_results):
+            if not result.success:
+                err = str(result.exception)
+                if 'registration-token-not-registered' in err or 'invalid-registration-token' in err or 'InvalidRegistration' in err:
+                    if i < len(all_tokens):
+                        invalid_tokens.add(all_tokens[i])
+
+        if not invalid_tokens:
+            return
+
+        print(f"🧹 Cleaning {len(invalid_tokens)} invalid tokens...")
+        for safe_email, user_data in user_tokens.items():
+            if isinstance(user_data, dict):
+                old_tokens = user_data.get('tokens', [])
+                new_tokens = [t for t in old_tokens if t not in invalid_tokens]
+                if len(new_tokens) != len(old_tokens):
+                    user_data['tokens'] = new_tokens
+                    requests.put(
+                        f"{FIREBASE_DB_URL}/userTokens/{safe_email}.json",
+                        json=user_data, timeout=10
+                    )
+                    print(f"🧹 Cleaned tokens for {safe_email}")
+    except Exception as e:
+        print(f"Clean tokens error: {e}")
+
 def send_fcm_all(title, body):
     try:
         import requests
@@ -131,6 +161,8 @@ def send_fcm_all(title, body):
         messages = [
             messaging.Message(
                 notification=messaging.Notification(title=title, body=body),
+                android=messaging.AndroidConfig(priority='high'),
+                apns=messaging.APNSConfig(headers={'apns-priority': '10'}),
                 token=token
             ) for token in tokens
         ]
@@ -138,6 +170,8 @@ def send_fcm_all(title, body):
         success = sum(1 for r in response.responses if r.success)
         failure = len(response.responses) - success
         print(f"FCM All: {success} success, {failure} failure")
+        if failure > 0:
+            clean_invalid_tokens(user_tokens, response.responses, tokens)
         return success, failure
     except Exception as e:
         print(f"FCM Error: {e}")
@@ -166,6 +200,8 @@ def send_fcm_new_files(title, body):
         messages = [
             messaging.Message(
                 notification=messaging.Notification(title=title, body=body),
+                android=messaging.AndroidConfig(priority='high'),
+                apns=messaging.APNSConfig(headers={'apns-priority': '10'}),
                 token=token
             ) for token in tokens
         ]
@@ -173,6 +209,8 @@ def send_fcm_new_files(title, body):
         success = sum(1 for r in response.responses if r.success)
         failure = len(response.responses) - success
         print(f"FCM New Files: {success} success, {failure} failure")
+        if failure > 0:
+            clean_invalid_tokens(user_tokens, response.responses, tokens)
         return success, failure
     except Exception as e:
         print(f"FCM New Files Error: {e}")
