@@ -336,7 +336,7 @@ def upload_file():
 
 # --- Poll watcher ---
 def poll_watcher():
-    import requests, time
+    import requests
     print("🗳️ Poll Watcher started")
     last_poll_id = None
     time.sleep(30)
@@ -361,7 +361,7 @@ def poll_watcher():
 
 # --- Quick Links watcher ---
 def quicklinks_watcher():
-    import requests, time
+    import requests
     print("🔗 Quick Links Watcher started")
     last_count = -1
     time.sleep(30)
