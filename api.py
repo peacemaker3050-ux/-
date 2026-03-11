@@ -447,7 +447,7 @@ def schedules_watcher():
                 schedules = []
 
             now = datetime.now()
-            current_day  = now.weekday()  # 0=Monday ... 6=Sunday
+            current_day = (now.weekday() + 1) % 7  # 0=Sunday like JavaScript
             current_time = now.strftime('%H:%M')
             changed = False
 
@@ -502,13 +502,58 @@ def schedules_watcher():
             print(f"Schedules Watcher Error: {e}")
         time.sleep(60)  # Check every minute
 
+# --- Doctor notifications watcher ---
+def notifications_watcher():
+    print("📢 Notifications Watcher started")
+    last_notif_ts = int(time.time() * 1000)
+    time.sleep(30)
+    while True:
+        try:
+            db = get_database_sync(force_refresh=True)
+            updates = db.get('recentUpdates', [])
+            if updates and isinstance(updates, list):
+                newest = updates[0]
+                ts = newest.get('timestamp', 0)
+                if ts > last_notif_ts:
+                    last_notif_ts = ts
+                    send_fcm_all(
+                        f"📢 {newest.get('doctor','')} — {newest.get('subject','')}",
+                        newest.get('message', 'اشعار جديد')
+                    )
+                    print(f"📢 Notification sent: {newest.get('message','')}")
+        except Exception as e:
+            print(f"Notifications Watcher Error: {e}")
+        time.sleep(30)
+
+# --- Broadcast watcher ---
+def broadcast_watcher():
+    print("📣 Broadcast Watcher started")
+    last_broadcast_ts = 0
+    time.sleep(30)
+    while True:
+        try:
+            db = get_database_sync(force_refresh=True)
+            broadcast = db.get('generalBroadcast', {})
+            if broadcast.get('active') and broadcast.get('timestamp', 0) > last_broadcast_ts:
+                last_broadcast_ts = broadcast['timestamp']
+                send_fcm_all(
+                    f"📣 {broadcast.get('title', 'اعلان جديد')}",
+                    broadcast.get('body', '')
+                )
+                print(f"📣 Broadcast sent: {broadcast.get('title','')}")
+        except Exception as e:
+            print(f"Broadcast Watcher Error: {e}")
+        time.sleep(30)
+
 # ==========================================
 # 10. Start
 # ==========================================
 def start_watchers():
-    threading.Thread(target=poll_watcher,        daemon=True).start()
-    threading.Thread(target=quicklinks_watcher,  daemon=True).start()
-    threading.Thread(target=schedules_watcher,   daemon=True).start()
+    threading.Thread(target=poll_watcher,            daemon=True).start()
+    threading.Thread(target=quicklinks_watcher,      daemon=True).start()
+    threading.Thread(target=schedules_watcher,       daemon=True).start()
+    threading.Thread(target=notifications_watcher,   daemon=True).start()
+    threading.Thread(target=broadcast_watcher,       daemon=True).start()
 
 # Auto-start watchers when gunicorn loads the module
 start_watchers()
