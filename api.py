@@ -209,6 +209,9 @@ def send_fcm_new_files(title, body):
         success = sum(1 for r in response.responses if r.success)
         failure = len(response.responses) - success
         print(f"FCM New Files: {success} success, {failure} failure")
+        for i, r in enumerate(response.responses):
+            if not r.success:
+                print(f"FCM Fail token[{i}]: {r.exception}")
         if failure > 0:
             clean_invalid_tokens(user_tokens, response.responses, tokens)
         return success, failure
