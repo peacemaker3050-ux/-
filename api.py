@@ -144,10 +144,13 @@ def clean_invalid_tokens(user_tokens, token_results, all_tokens):
 def send_fcm_all(title, body):
     try:
         import requests
+        print(f"📤 send_fcm_all called: {title} | {body}")
         resp = requests.get(f"{FIREBASE_DB_URL}/userTokens.json", timeout=10)
+        print(f"📤 userTokens status: {resp.status_code}")
         if resp.status_code != 200:
             return 0, 0
         user_tokens = resp.json()
+        print(f"📤 userTokens raw: {list(user_tokens.keys()) if user_tokens else 'EMPTY'}")
         if not user_tokens:
             return 0, 0
         tokens = []
@@ -156,7 +159,9 @@ def send_fcm_all(title, body):
                 tokens.extend(user_data)
             elif isinstance(user_data, dict):
                 tokens.extend(user_data.get('tokens', []))
+        print(f"📤 Total tokens found: {len(tokens)}")
         if not tokens:
+            print("📤 No tokens — aborting")
             return 0, 0
         messages = [
             messaging.Message(
@@ -170,6 +175,9 @@ def send_fcm_all(title, body):
         success = sum(1 for r in response.responses if r.success)
         failure = len(response.responses) - success
         print(f"FCM All: {success} success, {failure} failure")
+        for i, r in enumerate(response.responses):
+            if not r.success:
+                print(f"❌ Token[{i}] failed: {r.exception}")
         if failure > 0:
             clean_invalid_tokens(user_tokens, response.responses, tokens)
         return success, failure
@@ -549,11 +557,13 @@ def broadcast_watcher():
 # 10. Start
 # ==========================================
 def start_watchers():
+    print("🚀 Starting all watchers...")
     threading.Thread(target=poll_watcher,            daemon=True).start()
     threading.Thread(target=quicklinks_watcher,      daemon=True).start()
     threading.Thread(target=schedules_watcher,       daemon=True).start()
     threading.Thread(target=notifications_watcher,   daemon=True).start()
     threading.Thread(target=broadcast_watcher,       daemon=True).start()
+    print("✅ All watchers started")
 
 # Auto-start watchers when gunicorn loads the module
 start_watchers()
