@@ -5,6 +5,13 @@ import asyncio
 import threading
 import time
 from datetime import datetime
+import os
+os.environ['TZ'] = 'Africa/Cairo'
+try:
+    import time as _time
+    _time.tzset()
+except:
+    pass
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 
