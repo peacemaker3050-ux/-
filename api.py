@@ -469,7 +469,14 @@ def schedules_watcher():
                 # Check day and time match
                 if sched_day != current_day:
                     continue
-                if sched_time != current_time:
+                # Allow 2-minute window
+                try:
+                    sched_h, sched_m = map(int, sched_time.split(':'))
+                    sched_total = sched_h * 60 + sched_m
+                    now_total   = now.hour * 60 + now.minute
+                    if abs(now_total - sched_total) > 2:
+                        continue
+                except:
                     continue
 
                 # Avoid sending twice in same minute
@@ -497,7 +504,7 @@ def schedules_watcher():
                     full_db = get_database_sync(force_refresh=True)
                     full_db['schedules'] = schedules
                     import json as _json
-                    req.put(
+                    req.patch(
                         f"{FIREBASE_DB_URL}/.json",
                         json={'data': _json.dumps(full_db)},
                         timeout=10
