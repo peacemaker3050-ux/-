@@ -172,9 +172,25 @@ def send_fcm_all(title, body):
             return 0, 0
         messages = [
             messaging.Message(
-                notification=messaging.Notification(title=title, body=body),
-                android=messaging.AndroidConfig(priority='high'),
+                notification=messaging.Notification(
+                    title=title,
+                    body=body,
+                    image='https://peacemaker3050-ux.github.io/2ndMec/icon-512.png'
+                ),
+                android=messaging.AndroidConfig(
+                    priority='high',
+                    notification=messaging.AndroidNotification(
+                        icon='https://peacemaker3050-ux.github.io/2ndMec/icon-512.png',
+                        color='#3b82f6'
+                    )
+                ),
                 apns=messaging.APNSConfig(headers={'apns-priority': '10'}),
+                webpush=messaging.WebpushConfig(
+                    notification=messaging.WebpushNotification(
+                        icon='https://peacemaker3050-ux.github.io/2ndMec/icon-512.png',
+                        badge='https://peacemaker3050-ux.github.io/2ndMec/icon-512.png'
+                    )
+                ),
                 token=token
             ) for token in tokens
         ]
@@ -214,9 +230,25 @@ def send_fcm_new_files(title, body):
             return 0, 0
         messages = [
             messaging.Message(
-                notification=messaging.Notification(title=title, body=body),
-                android=messaging.AndroidConfig(priority='high'),
+                notification=messaging.Notification(
+                    title=title,
+                    body=body,
+                    image='https://peacemaker3050-ux.github.io/2ndMec/icon-512.png'
+                ),
+                android=messaging.AndroidConfig(
+                    priority='high',
+                    notification=messaging.AndroidNotification(
+                        icon='https://peacemaker3050-ux.github.io/2ndMec/icon-512.png',
+                        color='#3b82f6'
+                    )
+                ),
                 apns=messaging.APNSConfig(headers={'apns-priority': '10'}),
+                webpush=messaging.WebpushConfig(
+                    notification=messaging.WebpushNotification(
+                        icon='https://peacemaker3050-ux.github.io/2ndMec/icon-512.png',
+                        badge='https://peacemaker3050-ux.github.io/2ndMec/icon-512.png'
+                    )
+                ),
                 token=token
             ) for token in tokens
         ]
