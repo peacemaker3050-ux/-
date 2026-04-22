@@ -332,13 +332,16 @@ def upload_file():
     doctor      = request.form.get('doctor', '')
     folder_path = request.form.get('folder_path', '')  # e.g. "Lectures/Week1"
     notify      = request.form.get('notify', 'true') == 'true'
-    scope_key   = request.form.get('scopeKey', DEFAULT_SCOPE_KEY)
+    scope_key   = normalize_scope_key(request.form.get('scopeKey', DEFAULT_SCOPE_KEY))
 
     try:
         service = get_drive_service()
 
-        # Navigate/create folder structure: Root → Subject → Doctor → [subfolders]
+        # Navigate/create folder structure:
+        # Root -> Scopes -> scopeKey -> Subject -> Doctor -> [subfolders]
         current_folder_id = DRIVE_FOLDER_ID
+        current_folder_id = get_or_create_folder(service, "Scopes", current_folder_id)
+        current_folder_id = get_or_create_folder(service, scope_key, current_folder_id)
 
         if subject:
             current_folder_id = get_or_create_folder(service, subject, current_folder_id)
@@ -375,7 +378,7 @@ def upload_file():
         drive_link = uploaded.get('webViewLink', '')
         file_id    = uploaded.get('id', '')
 
-        print(f"✅ Uploaded: {file.filename} → {subject}/{doctor}/{folder_path}")
+        print(f"✅ Uploaded: {file.filename} → {scope_key}/{subject}/{doctor}/{folder_path}")
 
         # Send FCM if notify enabled
         if notify:
@@ -389,7 +392,8 @@ def upload_file():
             "success": True,
             "fileId": file_id,
             "fileName": file.filename,
-            "link": drive_link
+            "link": drive_link,
+            "scopeKey": scope_key
         })
     except Exception as e:
         print(f"Upload Error: {e}")
