@@ -18,6 +18,7 @@ from flask_cors import CORS
 import firebase_admin
 from firebase_admin import credentials, messaging
 import aiohttp
+from urllib.parse import quote
 
 # Google Drive
 from google.oauth2.credentials import Credentials
@@ -29,6 +30,7 @@ import io
 # 1. Config
 # ==========================================
 FIREBASE_DB_URL = "https://libirary-b2424-default-rtdb.firebaseio.com"
+DEFAULT_SCOPE_KEY = "ميكانيكا__second__term2"
 DRIVE_FOLDER_ID = "1T0MwUb-dc3UN3hMjrio1GVT6lm1mQl4Q"
 
 # Google Drive OAuth credentials (from bot.py)
@@ -89,15 +91,26 @@ CORS(app_flask, origins=["https://peacemaker3050-ux.github.io"])
 db_cache = None
 last_cache_time = 0
 CACHE_DURATION = 60
+db_cache_by_scope = {}
+last_cache_time_by_scope = {}
 
-def get_database_sync(force_refresh=False):
-    global db_cache, last_cache_time
+def normalize_scope_key(scope_key):
+    s = (scope_key or DEFAULT_SCOPE_KEY).strip()
+    return s if s else DEFAULT_SCOPE_KEY
+
+def scoped_db_base(scope_key=None):
+    safe_scope = quote(normalize_scope_key(scope_key), safe='')
+    return f"{FIREBASE_DB_URL}/scopes/{safe_scope}"
+
+def get_database_sync(force_refresh=False, scope_key=None):
+    global db_cache, last_cache_time, db_cache_by_scope, last_cache_time_by_scope
+    scope = normalize_scope_key(scope_key)
     now = time.time()
-    if not force_refresh and db_cache and (now - last_cache_time < CACHE_DURATION):
-        return db_cache
+    if not force_refresh and db_cache_by_scope.get(scope) and (now - last_cache_time_by_scope.get(scope, 0) < CACHE_DURATION):
+        return db_cache_by_scope[scope]
     try:
         import requests
-        resp = requests.get(f"{FIREBASE_DB_URL}/.json", timeout=10)
+        resp = requests.get(f"{scoped_db_base(scope)}/.json", timeout=10)
         if resp.status_code == 200:
             raw = resp.json()
             parsed = raw
@@ -109,16 +122,18 @@ def get_database_sync(force_refresh=False):
             if parsed and isinstance(parsed.get('data'), dict):
                 parsed = parsed['data']
             db_cache = parsed if parsed else {"database": {}}
+            db_cache_by_scope[scope] = db_cache
+            last_cache_time_by_scope[scope] = now
             last_cache_time = now
-            return db_cache
+            return db_cache_by_scope[scope]
     except Exception as e:
         print(f"DB Fetch Error: {e}")
-    return db_cache if db_cache else {"database": {}}
+    return db_cache_by_scope.get(scope) if db_cache_by_scope.get(scope) else {"database": {}}
 
 # ==========================================
 # 6. Helper: send FCM to all tokens
 # ==========================================
-def clean_invalid_tokens(user_tokens, token_results, all_tokens):
+def clean_invalid_tokens(user_tokens, token_results, all_tokens, scope_key=None):
     """Remove invalid/expired tokens from Firebase"""
     try:
         import requests
@@ -141,18 +156,18 @@ def clean_invalid_tokens(user_tokens, token_results, all_tokens):
                 if len(new_tokens) != len(old_tokens):
                     user_data['tokens'] = new_tokens
                     requests.put(
-                        f"{FIREBASE_DB_URL}/userTokens/{safe_email}.json",
+                        f"{scoped_db_base(scope_key)}/userTokens/{safe_email}.json",
                         json=user_data, timeout=10
                     )
                     print(f"🧹 Cleaned tokens for {safe_email}")
     except Exception as e:
         print(f"Clean tokens error: {e}")
 
-def send_fcm_all(title, body):
+def send_fcm_all(title, body, scope_key=None):
     try:
         import requests
         print(f"📤 send_fcm_all called: {title} | {body}")
-        resp = requests.get(f"{FIREBASE_DB_URL}/userTokens.json", timeout=10)
+        resp = requests.get(f"{scoped_db_base(scope_key)}/userTokens.json", timeout=10)
         print(f"📤 userTokens status: {resp.status_code}")
         if resp.status_code != 200:
             return 0, 0
@@ -202,7 +217,7 @@ def send_fcm_all(title, body):
             if not r.success:
                 print(f"❌ Token[{i}] failed: {r.exception}")
         if failure > 0:
-            clean_invalid_tokens(user_tokens, response.responses, tokens)
+            clean_invalid_tokens(user_tokens, response.responses, tokens, scope_key)
         return success, failure
     except Exception as e:
         print(f"FCM Error: {e}")
@@ -211,10 +226,10 @@ def send_fcm_all(title, body):
 # ==========================================
 # 7. Helper: send FCM to new-files-enabled tokens only
 # ==========================================
-def send_fcm_new_files(title, body):
+def send_fcm_new_files(title, body, scope_key=None):
     try:
         import requests
-        resp = requests.get(f"{FIREBASE_DB_URL}/userTokens.json", timeout=10)
+        resp = requests.get(f"{scoped_db_base(scope_key)}/userTokens.json", timeout=10)
         if resp.status_code != 200:
             return 0, 0
         user_tokens = resp.json()
@@ -260,7 +275,7 @@ def send_fcm_new_files(title, body):
             if not r.success:
                 print(f"FCM Fail token[{i}]: {r.exception}")
         if failure > 0:
-            clean_invalid_tokens(user_tokens, response.responses, tokens)
+            clean_invalid_tokens(user_tokens, response.responses, tokens, scope_key)
         return success, failure
     except Exception as e:
         print(f"FCM New Files Error: {e}")
@@ -282,9 +297,10 @@ def send_notification():
         return jsonify({"error": "No data"}), 400
     title = data.get('title', '')
     body  = data.get('body', '')
+    scope_key = data.get('scopeKey') or DEFAULT_SCOPE_KEY
     if not title or not body:
         return jsonify({"error": "title and body required"}), 400
-    success, failure = send_fcm_all(title, body)
+    success, failure = send_fcm_all(title, body, scope_key=scope_key)
     return jsonify({"success": success, "failure": failure})
 
 # --- Helper: get or create folder by name inside a parent ---
@@ -316,6 +332,7 @@ def upload_file():
     doctor      = request.form.get('doctor', '')
     folder_path = request.form.get('folder_path', '')  # e.g. "Lectures/Week1"
     notify      = request.form.get('notify', 'true') == 'true'
+    scope_key   = request.form.get('scopeKey', DEFAULT_SCOPE_KEY)
 
     try:
         service = get_drive_service()
@@ -364,7 +381,8 @@ def upload_file():
         if notify:
             send_fcm_new_files(
                 f"📂 New file — {subject}",
-                file.filename
+                file.filename,
+                scope_key=scope_key
             )
 
         return jsonify({
@@ -544,7 +562,7 @@ def schedules_watcher():
                     full_db['schedules'] = schedules
                     import json as _json
                     req.patch(
-                        f"{FIREBASE_DB_URL}/.json",
+                        f"{scoped_db_base(DEFAULT_SCOPE_KEY)}/.json",
                         json={'data': _json.dumps(full_db)},
                         timeout=10
                     )
