@@ -130,6 +130,19 @@ def get_database_sync(force_refresh=False, scope_key=None):
         print(f"DB Fetch Error: {e}")
     return db_cache_by_scope.get(scope) if db_cache_by_scope.get(scope) else {"database": {}}
 
+def get_all_scope_keys():
+    try:
+        import requests
+        resp = requests.get(f"{FIREBASE_DB_URL}/scopes.json", timeout=10)
+        if resp.status_code != 200:
+            return [DEFAULT_SCOPE_KEY]
+        data = resp.json() or {}
+        if isinstance(data, dict) and data:
+            return list(data.keys())
+    except Exception as e:
+        print(f"Scopes list error: {e}")
+    return [DEFAULT_SCOPE_KEY]
+
 # ==========================================
 # 6. Helper: send FCM to all tokens
 # ==========================================
@@ -407,23 +420,25 @@ def upload_file():
 def poll_watcher():
     import requests
     print("🗳️ Poll Watcher started")
-    last_poll_id = None
+    last_poll_id_by_scope = {}
     time.sleep(30)
     while True:
         try:
-            db = get_database_sync(force_refresh=True)
-            poll = db.get('activePoll')
-            if poll and not poll.get('ended', False):
-                poll_id = str(poll.get('question', '')) + str(poll.get('endsAt', 0))
-                ends_at_ms  = poll.get('endsAt', 0)
-                remaining_s = max(0, int((ends_at_ms - time.time() * 1000) / 1000))
-                if poll_id != last_poll_id and remaining_s > 0:
-                    print(f"🗳️ New poll: {poll.get('question','')}")
-                    send_fcm_all(
-                        "🗳️ New Poll — Vote Now!",
-                        poll.get('question', 'A new poll is waiting for your vote')
-                    )
-                    last_poll_id = poll_id
+            for scope_key in get_all_scope_keys():
+                db = get_database_sync(force_refresh=True, scope_key=scope_key)
+                poll = db.get('activePoll')
+                if poll and not poll.get('ended', False):
+                    poll_id = str(poll.get('question', '')) + str(poll.get('endsAt', 0))
+                    ends_at_ms  = poll.get('endsAt', 0)
+                    remaining_s = max(0, int((ends_at_ms - time.time() * 1000) / 1000))
+                    if poll_id != last_poll_id_by_scope.get(scope_key) and remaining_s > 0:
+                        print(f"🗳️ New poll [{scope_key}]: {poll.get('question','')}")
+                        send_fcm_all(
+                            "🗳️ New Poll — Vote Now!",
+                            poll.get('question', 'A new poll is waiting for your vote'),
+                            scope_key=scope_key
+                        )
+                        last_poll_id_by_scope[scope_key] = poll_id
         except Exception as e:
             print(f"Poll Watcher Error: {e}")
         time.sleep(30)
@@ -432,25 +447,30 @@ def poll_watcher():
 def quicklinks_watcher():
     import requests
     print("🔗 Quick Links Watcher started")
-    last_count = -1
+    last_count_by_scope = {}
     time.sleep(30)
     while True:
         try:
-            db = get_database_sync(force_refresh=True)
-            links = db.get('quickLinks', [])
-            if not isinstance(links, list):
-                links = []
-            count = len(links)
-            if last_count == -1:
-                last_count = count
-            elif count > last_count:
-                new_link = links[-1]
-                print(f"🔗 New link: {new_link.get('title','')}")
-                send_fcm_all(
-                    "🔗 New Link Added",
-                    new_link.get('title', 'A new link is now available')
-                )
-            last_count = count
+            for scope_key in get_all_scope_keys():
+                db = get_database_sync(force_refresh=True, scope_key=scope_key)
+                links = db.get('quickLinks', [])
+                if not isinstance(links, list):
+                    links = []
+                count = len(links)
+                prev = last_count_by_scope.get(scope_key, -1)
+                if prev == -1:
+                    last_count_by_scope[scope_key] = count
+                elif count > prev:
+                    new_link = links[-1]
+                    print(f"🔗 New link [{scope_key}]: {new_link.get('title','')}")
+                    send_fcm_all(
+                        "🔗 New Link Added",
+                        new_link.get('title', 'A new link is now available'),
+                        scope_key=scope_key
+                    )
+                    last_count_by_scope[scope_key] = count
+                else:
+                    last_count_by_scope[scope_key] = count
         except Exception as e:
             print(f"Quick Links Watcher Error: {e}")
         time.sleep(30)
@@ -510,69 +530,66 @@ def schedules_watcher():
     time.sleep(30)
     while True:
         try:
-            db = get_database_sync(force_refresh=True)
-            schedules = db.get('schedules', [])
-            if not isinstance(schedules, list):
-                schedules = []
+            for scope_key in get_all_scope_keys():
+                db = get_database_sync(force_refresh=True, scope_key=scope_key)
+                schedules = db.get('schedules', [])
+                if not isinstance(schedules, list):
+                    schedules = []
 
-            now = datetime.now()
-            current_day = (now.weekday() + 1) % 7  # 0=Sunday like JavaScript
-            current_time = now.strftime('%H:%M')
-            changed = False
+                now = datetime.now()
+                current_day = (now.weekday() + 1) % 7  # 0=Sunday like JavaScript
+                current_time = now.strftime('%H:%M')
+                changed = False
 
-            for sched in schedules:
-                if not sched.get('active', False):
-                    continue
-                sched_day  = sched.get('day', -1)
-                sched_time = sched.get('time', '')
-                last_triggered = sched.get('lastTriggered', 0)
-
-                # Check day and time match
-                if sched_day != current_day:
-                    continue
-                # Allow 2-minute window
-                try:
-                    sched_h, sched_m = map(int, sched_time.split(':'))
-                    sched_total = sched_h * 60 + sched_m
-                    now_total   = now.hour * 60 + now.minute
-                    if abs(now_total - sched_total) > 2:
+                for sched in schedules:
+                    if not sched.get('active', False):
                         continue
-                except:
-                    continue
+                    sched_day  = sched.get('day', -1)
+                    sched_time = sched.get('time', '')
+                    last_triggered = sched.get('lastTriggered', 0)
 
-                # Avoid sending twice in same minute
-                last_dt = datetime.fromtimestamp(last_triggered / 1000) if last_triggered else None
-                if last_dt and last_dt.date() == now.date() and last_dt.strftime('%H:%M') == current_time:
-                    continue
+                    if sched_day != current_day:
+                        continue
+                    try:
+                        sched_h, sched_m = map(int, sched_time.split(':'))
+                        sched_total = sched_h * 60 + sched_m
+                        now_total   = now.hour * 60 + now.minute
+                        if abs(now_total - sched_total) > 2:
+                            continue
+                    except:
+                        continue
 
-                subject = sched.get('subject', '')
-                doctor  = sched.get('doctor', '')
-                message = sched.get('message', '')
+                    last_dt = datetime.fromtimestamp(last_triggered / 1000) if last_triggered else None
+                    if last_dt and last_dt.date() == now.date() and last_dt.strftime('%H:%M') == current_time:
+                        continue
 
-                print(f"⏰ Firing schedule: {subject} - {doctor}: {message}")
-                send_fcm_all(
-                    f"🔔 Reminder — {doctor} ({subject})",
-                    message
-                )
+                    subject = sched.get('subject', '')
+                    doctor  = sched.get('doctor', '')
+                    message = sched.get('message', '')
 
-                # Update lastTriggered
-                sched['lastTriggered'] = int(now.timestamp() * 1000)
-                changed = True
-
-            if changed:
-                # Save updated schedules back to Firebase
-                try:
-                    full_db = get_database_sync(force_refresh=True)
-                    full_db['schedules'] = schedules
-                    import json as _json
-                    req.patch(
-                        f"{scoped_db_base(DEFAULT_SCOPE_KEY)}/.json",
-                        json={'data': _json.dumps(full_db)},
-                        timeout=10
+                    print(f"⏰ Firing schedule [{scope_key}]: {subject} - {doctor}: {message}")
+                    send_fcm_all(
+                        f"🔔 Reminder — {doctor} ({subject})",
+                        message,
+                        scope_key=scope_key
                     )
-                    print("⏰ Schedules updated in Firebase")
-                except Exception as e:
-                    print(f"⏰ Schedule save error: {e}")
+
+                    sched['lastTriggered'] = int(now.timestamp() * 1000)
+                    changed = True
+
+                if changed:
+                    try:
+                        full_db = get_database_sync(force_refresh=True, scope_key=scope_key)
+                        full_db['schedules'] = schedules
+                        import json as _json
+                        req.patch(
+                            f"{scoped_db_base(scope_key)}/.json",
+                            json={'data': _json.dumps(full_db)},
+                            timeout=10
+                        )
+                        print(f"⏰ Schedules updated in Firebase [{scope_key}]")
+                    except Exception as e:
+                        print(f"⏰ Schedule save error [{scope_key}]: {e}")
 
         except Exception as e:
             print(f"Schedules Watcher Error: {e}")
@@ -581,22 +598,25 @@ def schedules_watcher():
 # --- Doctor notifications watcher ---
 def notifications_watcher():
     print("📢 Notifications Watcher started")
-    last_notif_ts = int(time.time() * 1000)
+    last_notif_ts_by_scope = {}
     time.sleep(30)
     while True:
         try:
-            db = get_database_sync(force_refresh=True)
-            updates = db.get('recentUpdates', [])
-            if updates and isinstance(updates, list):
-                newest = updates[0]
-                ts = newest.get('timestamp', 0)
-                if ts > last_notif_ts:
-                    last_notif_ts = ts
-                    send_fcm_all(
-                        f"📢 {newest.get('doctor','')} — {newest.get('subject','')}",
-                        newest.get('message', 'اشعار جديد')
-                    )
-                    print(f"📢 Notification sent: {newest.get('message','')}")
+            for scope_key in get_all_scope_keys():
+                db = get_database_sync(force_refresh=True, scope_key=scope_key)
+                updates = db.get('recentUpdates', [])
+                if updates and isinstance(updates, list):
+                    newest = updates[0]
+                    ts = newest.get('timestamp', 0)
+                    last_ts = last_notif_ts_by_scope.get(scope_key, int(time.time() * 1000))
+                    if ts > last_ts:
+                        last_notif_ts_by_scope[scope_key] = ts
+                        send_fcm_all(
+                            f"📢 {newest.get('doctor','')} — {newest.get('subject','')}",
+                            newest.get('message', 'اشعار جديد'),
+                            scope_key=scope_key
+                        )
+                        print(f"📢 Notification sent [{scope_key}]: {newest.get('message','')}")
         except Exception as e:
             print(f"Notifications Watcher Error: {e}")
         time.sleep(30)
@@ -604,19 +624,22 @@ def notifications_watcher():
 # --- Broadcast watcher ---
 def broadcast_watcher():
     print("📣 Broadcast Watcher started")
-    last_broadcast_ts = 0
+    last_broadcast_ts_by_scope = {}
     time.sleep(30)
     while True:
         try:
-            db = get_database_sync(force_refresh=True)
-            broadcast = db.get('generalBroadcast', {})
-            if broadcast.get('active') and broadcast.get('timestamp', 0) > last_broadcast_ts:
-                last_broadcast_ts = broadcast['timestamp']
-                send_fcm_all(
-                    f"📣 {broadcast.get('title', 'اعلان جديد')}",
-                    broadcast.get('body', '')
-                )
-                print(f"📣 Broadcast sent: {broadcast.get('title','')}")
+            for scope_key in get_all_scope_keys():
+                db = get_database_sync(force_refresh=True, scope_key=scope_key)
+                broadcast = db.get('generalBroadcast', {})
+                last_ts = last_broadcast_ts_by_scope.get(scope_key, 0)
+                if broadcast.get('active') and broadcast.get('timestamp', 0) > last_ts:
+                    last_broadcast_ts_by_scope[scope_key] = broadcast['timestamp']
+                    send_fcm_all(
+                        f"📣 {broadcast.get('title', 'اعلان جديد')}",
+                        broadcast.get('body', ''),
+                        scope_key=scope_key
+                    )
+                    print(f"📣 Broadcast sent [{scope_key}]: {broadcast.get('title','')}")
         except Exception as e:
             print(f"Broadcast Watcher Error: {e}")
         time.sleep(30)
