@@ -4,6 +4,7 @@ import uuid
 import asyncio
 import threading
 import time
+import sqlite3
 from datetime import datetime
 import os
 os.environ['TZ'] = 'Africa/Cairo'
@@ -16,7 +17,7 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 
 import firebase_admin
-from firebase_admin import credentials, messaging
+from firebase_admin import credentials, messaging, auth as firebase_auth
 import aiohttp
 from urllib.parse import quote
 
@@ -36,7 +37,7 @@ DRIVE_FOLDER_ID = "1T0MwUb-dc3UN3hMjrio1GVT6lm1mQl4Q"
 # Google Drive OAuth credentials (from bot.py)
 CLIENT_ID     = '1006485502608-ok2u5i6nt6js64djqluithivsko4mnom.apps.googleusercontent.com'
 CLIENT_SECRET = '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'
-REFRESH_TOKEN = '1//03q20b0Cf_68JCgYIARAAGAMSNwF-L9IraDttb8qA8N_0sVb8HIdO90fMQYFNzwX2Ig8JMntxjDFYThn9GNPQCJbVLSvp_MJ25ts'
+REFRESH_TOKEN = '1//03hLblB_x3npmCgYIARAAGAMSNwF-L9IrZLeew0ACV5tDLCZlV2pNUE0OOkqUCiVpKuqvhDkEwV_ABGXSVJTlkKhqnEaJ4uz9Muo'
 
 RAILWAY_URL = "https://web-production-ae004.up.railway.app"
 
@@ -84,6 +85,82 @@ def get_drive_service():
 # ==========================================
 app_flask = Flask(__name__)
 CORS(app_flask, origins=["https://peacemaker3050-ux.github.io"])
+
+# ==========================================
+# 4.5 Chat DB (Scope-Isolated, non-Firebase)
+# ==========================================
+CHAT_DB_PATH = os.environ.get("CHAT_DB_PATH", "chat.db")
+
+def get_chat_conn():
+    conn = sqlite3.connect(CHAT_DB_PATH, check_same_thread=False)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+def init_chat_db():
+    conn = get_chat_conn()
+    cur = conn.cursor()
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS chat_members (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            scope_key TEXT NOT NULL,
+            phone TEXT NOT NULL,
+            name TEXT NOT NULL,
+            created_at INTEGER NOT NULL,
+            UNIQUE(scope_key, phone)
+        )
+    """)
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS chat_messages (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            scope_key TEXT NOT NULL,
+            group_id TEXT NOT NULL,
+            sender_name TEXT NOT NULL,
+            sender_phone TEXT NOT NULL,
+            message_type TEXT NOT NULL,
+            message_text TEXT,
+            media_url TEXT,
+            created_at INTEGER NOT NULL
+        )
+    """)
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_chat_messages_scope_group_time ON chat_messages(scope_key, group_id, created_at DESC)")
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS chat_reactions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            scope_key TEXT NOT NULL,
+            group_id TEXT NOT NULL,
+            message_id INTEGER NOT NULL,
+            phone TEXT NOT NULL,
+            reaction TEXT NOT NULL,
+            created_at INTEGER NOT NULL,
+            UNIQUE(scope_key, group_id, message_id, phone)
+        )
+    """)
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS chat_group_settings (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            scope_key TEXT NOT NULL,
+            group_id TEXT NOT NULL,
+            is_locked INTEGER NOT NULL DEFAULT 0,
+            updated_by TEXT,
+            updated_at INTEGER NOT NULL,
+            UNIQUE(scope_key, group_id)
+        )
+    """)
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS chat_reads (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            scope_key TEXT NOT NULL,
+            group_id TEXT NOT NULL,
+            message_id INTEGER NOT NULL,
+            phone TEXT NOT NULL,
+            created_at INTEGER NOT NULL,
+            UNIQUE(scope_key, group_id, message_id, phone)
+        )
+    """)
+    conn.commit()
+    conn.close()
+
+init_chat_db()
 
 # ==========================================
 # 5. Helper: get database
@@ -142,6 +219,25 @@ def get_all_scope_keys():
     except Exception as e:
         print(f"Scopes list error: {e}")
     return [DEFAULT_SCOPE_KEY]
+
+def verify_firebase_id_token(id_token):
+    try:
+        if not id_token:
+            return None
+        decoded = firebase_auth.verify_id_token(id_token)
+        return decoded
+    except Exception as e:
+        print(f"Token verify error: {e}")
+        return None
+
+def is_scope_admin(scope_key, email):
+    if not email:
+        return False
+    db = get_database_sync(force_refresh=True, scope_key=scope_key)
+    owner_email = str(db.get('ownerEmail') or OWNER_EMAIL).strip().lower()
+    admins = [str(a).strip().lower() for a in (db.get('admins') or [])]
+    email_l = str(email).strip().lower()
+    return email_l == owner_email or email_l in admins
 
 # ==========================================
 # 6. Helper: send FCM to all tokens
@@ -301,6 +397,226 @@ def send_fcm_new_files(title, body, scope_key=None):
 @app_flask.route('/health', methods=['GET'])
 def health():
     return jsonify({"status": "ok", "service": "UniBot API"})
+
+@app_flask.route('/chat/config', methods=['GET'])
+def chat_config():
+    return jsonify({
+        "ok": True,
+        "cloudinaryCloudName": os.environ.get("CLOUDINARY_CLOUD_NAME", ""),
+        "cloudinaryUploadPreset": os.environ.get("CLOUDINARY_UPLOAD_PRESET", "")
+    })
+
+@app_flask.route('/chat/register', methods=['POST'])
+def chat_register():
+    data = request.get_json() or {}
+    scope_key = normalize_scope_key(data.get('scopeKey'))
+    name = str(data.get('name', '')).strip()
+    phone = str(data.get('phone', '')).strip()
+    if not name or not phone:
+        return jsonify({"error": "name and phone required"}), 400
+    now = int(time.time() * 1000)
+    conn = get_chat_conn()
+    cur = conn.cursor()
+    cur.execute("""
+        INSERT INTO chat_members(scope_key, phone, name, created_at)
+        VALUES(?, ?, ?, ?)
+        ON CONFLICT(scope_key, phone) DO UPDATE SET name=excluded.name
+    """, (scope_key, phone, name, now))
+    conn.commit()
+    conn.close()
+    return jsonify({"ok": True})
+
+@app_flask.route('/chat/groups', methods=['GET'])
+def chat_groups():
+    scope_key = normalize_scope_key(request.args.get('scopeKey'))
+    db = get_database_sync(force_refresh=False, scope_key=scope_key)
+    subjects = list((db.get('database') or {}).keys())
+    groups = [{"id": "general", "name": "General", "type": "general"}]
+    for sub in subjects:
+        groups.append({"id": f"subject::{sub}", "name": sub, "type": "subject"})
+    return jsonify({"ok": True, "groups": groups})
+
+@app_flask.route('/chat/messages', methods=['GET'])
+def chat_messages_get():
+    scope_key = normalize_scope_key(request.args.get('scopeKey'))
+    group_id = str(request.args.get('groupId', 'general')).strip() or 'general'
+    limit = max(1, min(100, int(request.args.get('limit', 50))))
+    before_id = request.args.get('beforeId')
+    conn = get_chat_conn()
+    cur = conn.cursor()
+    if before_id:
+        cur.execute("""
+            SELECT * FROM chat_messages
+            WHERE scope_key=? AND group_id=? AND id < ?
+            ORDER BY id DESC LIMIT ?
+        """, (scope_key, group_id, int(before_id), limit))
+    else:
+        cur.execute("""
+            SELECT * FROM chat_messages
+            WHERE scope_key=? AND group_id=?
+            ORDER BY id DESC LIMIT ?
+        """, (scope_key, group_id, limit))
+    rows = [dict(r) for r in cur.fetchall()]
+    msg_ids = [r["id"] for r in rows]
+    reaction_map = {}
+    read_map = {}
+    if msg_ids:
+        q_marks = ",".join(["?"] * len(msg_ids))
+        cur.execute(
+            f"SELECT message_id, reaction, COUNT(*) as c FROM chat_reactions WHERE scope_key=? AND group_id=? AND message_id IN ({q_marks}) GROUP BY message_id, reaction",
+            [scope_key, group_id, *msg_ids]
+        )
+        for rr in cur.fetchall():
+            mid = rr["message_id"]
+            if mid not in reaction_map:
+                reaction_map[mid] = {}
+            reaction_map[mid][rr["reaction"]] = rr["c"]
+        cur.execute(
+            f"SELECT message_id, COUNT(*) as c FROM chat_reads WHERE scope_key=? AND group_id=? AND message_id IN ({q_marks}) GROUP BY message_id",
+            [scope_key, group_id, *msg_ids]
+        )
+        for sr in cur.fetchall():
+            read_map[sr["message_id"]] = sr["c"]
+    for r in rows:
+        r["reactions"] = reaction_map.get(r["id"], {})
+        r["read_count"] = read_map.get(r["id"], 0)
+    conn.close()
+    rows.reverse()
+    return jsonify({"ok": True, "messages": rows})
+
+@app_flask.route('/chat/messages', methods=['POST'])
+def chat_messages_post():
+    data = request.get_json() or {}
+    scope_key = normalize_scope_key(data.get('scopeKey'))
+    group_id = str(data.get('groupId', 'general')).strip() or 'general'
+    sender_name = str(data.get('senderName', '')).strip()
+    sender_phone = str(data.get('senderPhone', '')).strip()
+    message_type = str(data.get('messageType', 'text')).strip() or 'text'
+    message_text = str(data.get('messageText', '')).strip()
+    media_url = str(data.get('mediaUrl', '')).strip()
+    id_token = str(data.get('idToken', '')).strip()
+    if not sender_name or not sender_phone:
+        return jsonify({"error": "sender required"}), 400
+    if message_type == 'text' and not message_text:
+        return jsonify({"error": "messageText required"}), 400
+    now = int(time.time() * 1000)
+    conn = get_chat_conn()
+    cur = conn.cursor()
+    actor_is_admin = False
+    if id_token:
+        decoded = verify_firebase_id_token(id_token)
+        actor_email = str((decoded or {}).get('email', '')).strip().lower()
+        actor_is_admin = is_scope_admin(scope_key, actor_email)
+    cur.execute("SELECT is_locked FROM chat_group_settings WHERE scope_key=? AND group_id=? LIMIT 1", (scope_key, group_id))
+    lock_row = cur.fetchone()
+    is_locked = bool(lock_row["is_locked"]) if lock_row else False
+    if is_locked and not actor_is_admin:
+        conn.close()
+        return jsonify({"error": "group is locked"}), 403
+    cur.execute("""
+        INSERT INTO chat_messages(scope_key, group_id, sender_name, sender_phone, message_type, message_text, media_url, created_at)
+        VALUES(?, ?, ?, ?, ?, ?, ?, ?)
+    """, (scope_key, group_id, sender_name, sender_phone, message_type, message_text, media_url, now))
+    msg_id = cur.lastrowid
+    conn.commit()
+    conn.close()
+    send_fcm_all(
+        "💬 New chat message",
+        f"{sender_name}: {message_text[:80] if message_text else 'Media message'}",
+        scope_key=scope_key
+    )
+    return jsonify({"ok": True, "id": msg_id, "createdAt": now})
+
+@app_flask.route('/chat/reactions', methods=['POST'])
+def chat_reactions_post():
+    data = request.get_json() or {}
+    scope_key = normalize_scope_key(data.get('scopeKey'))
+    group_id = str(data.get('groupId', 'general')).strip() or 'general'
+    message_id = int(data.get('messageId', 0) or 0)
+    phone = str(data.get('phone', '')).strip()
+    reaction = str(data.get('reaction', '')).strip()[:8]
+    if message_id <= 0 or not phone or not reaction:
+        return jsonify({"error": "invalid reaction payload"}), 400
+    now = int(time.time() * 1000)
+    conn = get_chat_conn()
+    cur = conn.cursor()
+    cur.execute("""
+        INSERT INTO chat_reactions(scope_key, group_id, message_id, phone, reaction, created_at)
+        VALUES(?, ?, ?, ?, ?, ?)
+        ON CONFLICT(scope_key, group_id, message_id, phone) DO UPDATE SET reaction=excluded.reaction, created_at=excluded.created_at
+    """, (scope_key, group_id, message_id, phone, reaction, now))
+    conn.commit()
+    conn.close()
+    return jsonify({"ok": True})
+
+@app_flask.route('/chat/read', methods=['POST'])
+def chat_read_post():
+    data = request.get_json() or {}
+    scope_key = normalize_scope_key(data.get('scopeKey'))
+    group_id = str(data.get('groupId', 'general')).strip() or 'general'
+    phone = str(data.get('phone', '')).strip()
+    message_ids = data.get('messageIds') or []
+    if not phone or not isinstance(message_ids, list):
+        return jsonify({"error": "invalid read payload"}), 400
+    now = int(time.time() * 1000)
+    conn = get_chat_conn()
+    cur = conn.cursor()
+    for mid in message_ids[:200]:
+        try:
+            msg_id = int(mid)
+            if msg_id <= 0:
+                continue
+            cur.execute("""
+                INSERT OR IGNORE INTO chat_reads(scope_key, group_id, message_id, phone, created_at)
+                VALUES(?, ?, ?, ?, ?)
+            """, (scope_key, group_id, msg_id, phone, now))
+        except:
+            continue
+    conn.commit()
+    conn.close()
+    return jsonify({"ok": True})
+
+@app_flask.route('/chat/group-lock', methods=['POST'])
+def chat_group_lock_post():
+    data = request.get_json() or {}
+    scope_key = normalize_scope_key(data.get('scopeKey'))
+    group_id = str(data.get('groupId', 'general')).strip() or 'general'
+    is_locked = 1 if bool(data.get('isLocked', False)) else 0
+    id_token = str(data.get('idToken', '')).strip()
+    decoded = verify_firebase_id_token(id_token)
+    actor_email = str((decoded or {}).get('email', '')).strip().lower()
+    if not actor_email or not is_scope_admin(scope_key, actor_email):
+        return jsonify({"error": "unauthorized"}), 403
+    now = int(time.time() * 1000)
+    conn = get_chat_conn()
+    cur = conn.cursor()
+    cur.execute("""
+        INSERT INTO chat_group_settings(scope_key, group_id, is_locked, updated_by, updated_at)
+        VALUES(?, ?, ?, ?, ?)
+        ON CONFLICT(scope_key, group_id) DO UPDATE SET is_locked=excluded.is_locked, updated_by=excluded.updated_by, updated_at=excluded.updated_at
+    """, (scope_key, group_id, is_locked, actor_email, now))
+    conn.commit()
+    conn.close()
+    return jsonify({"ok": True, "isLocked": bool(is_locked)})
+
+@app_flask.route('/chat/group-state', methods=['GET'])
+def chat_group_state_get():
+    scope_key = normalize_scope_key(request.args.get('scopeKey'))
+    group_id = str(request.args.get('groupId', 'general')).strip() or 'general'
+    conn = get_chat_conn()
+    cur = conn.cursor()
+    cur.execute("SELECT is_locked, updated_by, updated_at FROM chat_group_settings WHERE scope_key=? AND group_id=? LIMIT 1", (scope_key, group_id))
+    row = cur.fetchone()
+    cur.execute("SELECT COUNT(*) as c FROM chat_members WHERE scope_key=?", (scope_key,))
+    members = int((cur.fetchone() or {"c": 0})["c"])
+    conn.close()
+    return jsonify({
+        "ok": True,
+        "isLocked": bool(row["is_locked"]) if row else False,
+        "updatedBy": row["updated_by"] if row else None,
+        "updatedAt": row["updated_at"] if row else None,
+        "membersInScope": members
+    })
 
 # --- Send notification to all users ---
 @app_flask.route('/send-notification', methods=['POST'])
