@@ -84,7 +84,7 @@ def get_drive_service():
 # 4. Flask App
 # ==========================================
 app_flask = Flask(__name__)
-CORS(app_flask, origins=["https://peacemaker3050-ux.github.io"])
+CORS(app_flask, origins=["https://peacemaker3050-ux.github.io", "https://claude.ai"], supports_credentials=True)
 
 # ==========================================
 # 4.5 Chat DB (Scope-Isolated, non-Firebase)
@@ -234,7 +234,7 @@ def is_scope_admin(scope_key, email):
     if not email:
         return False
     db = get_database_sync(force_refresh=True, scope_key=scope_key)
-    owner_email = str(db.get('ownerEmail') or OWNER_EMAIL).strip().lower()
+    owner_email = str(db.get('ownerEmail') or 'peacemaker3050@gmail.com').strip().lower()
     admins = [str(a).strip().lower() for a in (db.get('admins') or [])]
     email_l = str(email).strip().lower()
     return email_l == owner_email or email_l in admins
