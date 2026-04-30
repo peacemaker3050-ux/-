@@ -412,16 +412,39 @@ def chat_register():
     scope_key = normalize_scope_key(data.get('scopeKey'))
     name = str(data.get('name', '')).strip()
     phone = str(data.get('phone', '')).strip()
+    id_token = str(data.get('idToken', '')).strip()
+    student_code = str(data.get('studentCode', '')).strip()
     if not name or not phone:
         return jsonify({"error": "name and phone required"}), 400
+    email = ''
+    uid = ''
+    if id_token:
+        decoded = verify_firebase_id_token(id_token)
+        if decoded:
+            email = str(decoded.get('email', '')).strip().lower()
+            uid = str(decoded.get('uid', '')).strip()
     now = int(time.time() * 1000)
     conn = get_chat_conn()
     cur = conn.cursor()
+    # add email/uid/student_code columns if not exist
+    try:
+        cur.execute("ALTER TABLE chat_members ADD COLUMN email TEXT DEFAULT ''")
+    except: pass
+    try:
+        cur.execute("ALTER TABLE chat_members ADD COLUMN uid TEXT DEFAULT ''")
+    except: pass
+    try:
+        cur.execute("ALTER TABLE chat_members ADD COLUMN student_code TEXT DEFAULT ''")
+    except: pass
     cur.execute("""
-        INSERT INTO chat_members(scope_key, phone, name, created_at)
-        VALUES(?, ?, ?, ?)
-        ON CONFLICT(scope_key, phone) DO UPDATE SET name=excluded.name
-    """, (scope_key, phone, name, now))
+        INSERT INTO chat_members(scope_key, phone, name, email, uid, student_code, created_at)
+        VALUES(?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(scope_key, phone) DO UPDATE SET
+            name=excluded.name,
+            email=CASE WHEN excluded.email != '' THEN excluded.email ELSE email END,
+            uid=CASE WHEN excluded.uid != '' THEN excluded.uid ELSE uid END,
+            student_code=CASE WHEN excluded.student_code != '' THEN excluded.student_code ELSE student_code END
+    """, (scope_key, phone, name, email, uid, student_code, now))
     conn.commit()
     conn.close()
     return jsonify({"ok": True})
@@ -526,7 +549,40 @@ def chat_messages_post():
         scope_key=scope_key
     )
     return jsonify({"ok": True, "id": msg_id, "createdAt": now})
-
+@app_flask.route('/chat/messages/delete', methods=['POST'])
+def chat_message_delete():
+    data = request.get_json() or {}
+    scope_key = normalize_scope_key(data.get('scopeKey'))
+    group_id = str(data.get('groupId', 'general')).strip() or 'general'
+    message_id = int(data.get('messageId', 0) or 0)
+    phone = str(data.get('phone', '')).strip()
+    id_token = str(data.get('idToken', '')).strip()
+    if message_id <= 0:
+        return jsonify({"error": "invalid messageId"}), 400
+    conn = get_chat_conn()
+    cur = conn.cursor()
+    # get the message first
+    cur.execute("SELECT sender_phone FROM chat_messages WHERE id=? AND scope_key=?", (message_id, scope_key))
+    row = cur.fetchone()
+    if not row:
+        conn.close()
+        return jsonify({"error": "message not found"}), 404
+    actor_is_admin = False
+    actor_email = ''
+    if id_token:
+        decoded = verify_firebase_id_token(id_token)
+        actor_email = str((decoded or {}).get('email', '')).strip().lower()
+        actor_is_admin = is_scope_admin(scope_key, actor_email)
+    sender_phone = str(row['sender_phone']).strip()
+    # permission: own message OR admin
+    if not actor_is_admin and sender_phone != phone:
+        conn.close()
+        return jsonify({"error": "not allowed"}), 403
+    cur.execute("DELETE FROM chat_messages WHERE id=? AND scope_key=?", (message_id, scope_key))
+    cur.execute("DELETE FROM chat_reactions WHERE message_id=? AND scope_key=?", (message_id, scope_key))
+    conn.commit()
+    conn.close()
+    return jsonify({"ok": True})
 @app_flask.route('/chat/reactions', methods=['POST'])
 def chat_reactions_post():
     data = request.get_json() or {}
@@ -598,7 +654,23 @@ def chat_group_lock_post():
     conn.commit()
     conn.close()
     return jsonify({"ok": True, "isLocked": bool(is_locked)})
-
+@app_flask.route('/chat/members', methods=['GET'])
+def chat_members_get():
+    scope_key = normalize_scope_key(request.args.get('scopeKey'))
+    id_token = str(request.args.get('idToken', '')).strip()
+    if not id_token:
+        return jsonify({"error": "auth required"}), 401
+    decoded = verify_firebase_id_token(id_token)
+    actor_email = str((decoded or {}).get('email', '')).strip().lower()
+    if not is_scope_admin(scope_key, actor_email):
+        return jsonify({"error": "admin only"}), 403
+    conn = get_chat_conn()
+    cur = conn.cursor()
+    cur.execute("SELECT id, name, phone, created_at FROM chat_members WHERE scope_key=? ORDER BY created_at DESC", (scope_key,))
+    rows = cur.fetchall()
+    conn.close()
+    members = [{"id": r["id"], "name": r["name"], "phone": r["phone"], "email": r["email"] if "email" in r.keys() else "", "uid": r["uid"] if "uid" in r.keys() else "", "student_code": r["student_code"] if "student_code" in r.keys() else "", "created_at": r["created_at"]} for r in rows]
+    return jsonify({"members": members})
 @app_flask.route('/chat/group-state', methods=['GET'])
 def chat_group_state_get():
     scope_key = normalize_scope_key(request.args.get('scopeKey'))
