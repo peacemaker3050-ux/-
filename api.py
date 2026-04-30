@@ -5,6 +5,7 @@ import asyncio
 import threading
 import time
 import sqlite3
+import math
 from datetime import datetime
 import os
 os.environ['TZ'] = 'Africa/Cairo'
@@ -20,6 +21,8 @@ import firebase_admin
 from firebase_admin import credentials, messaging, auth as firebase_auth
 import aiohttp
 from urllib.parse import quote
+import requests as req
+import requests
 
 # Google Drive
 from google.oauth2.credentials import Credentials
@@ -230,6 +233,77 @@ def verify_firebase_id_token(id_token):
         print(f"Token verify error: {e}")
         return None
 
+def build_shoubra_system_prompt():
+    return (
+        "You are Shoubra AI, an elite academic assistant for engineering students at "
+        "Shoubra Faculty of Engineering, Benha University.\n\n"
+        "Your job is to help students with:\n"
+        "- Understanding lecture content and course materials\n"
+        "- Answering questions about uploaded files, summaries, and transcriptions\n"
+        "- Generating practice questions and quizzes (Test Me feature)\n"
+        "- Clarifying concepts from any subject or doctor's material\n\n"
+        "Rules:\n"
+        "- Always answer in the same language the student uses (Arabic or English)\n"
+        "- Be precise, academic, and structured\n"
+        "- When generating questions, vary difficulty: easy, medium, hard\n"
+        "- If context (lecture text/summary) is provided, ground your answer strictly in it\n"
+        "- Never hallucinate or fabricate facts about the university or courses\n"
+        "- If asked to 'اختبرني' or 'Test Me', immediately generate 5-10 questions from the provided context"
+    )
+
+def build_shoubra_fallback_context(scope_key):
+    db = get_database_sync(force_refresh=False, scope_key=scope_key) or {}
+    subjects = list((db.get('database') or {}).keys())[:30]
+    updates = db.get('recentUpdates') or []
+    updates_txt = []
+    for u in updates[:5]:
+        if not isinstance(u, dict):
+            continue
+        updates_txt.append(
+            f"- {u.get('doctor','')} ({u.get('subject','')}): {u.get('message','')}"
+        )
+    return (
+        "Available subjects:\n" + "\n".join(f"- {s}" for s in subjects) + "\n\n"
+        "Recent doctor updates:\n" + ("\n".join(updates_txt) if updates_txt else "- None")
+    )
+
+def call_groq_chat(messages, temperature=0.4, max_tokens=2000):
+    api_key = os.environ.get("GROQ_API_KEY", "").strip()
+    if not api_key:
+        raise RuntimeError("GROQ_API_KEY is missing")
+    model = os.environ.get("GROQ_CHAT_MODEL", "llama-3.3-70b-versatile").strip()
+    resp = req.post(
+        "https://api.groq.com/openai/v1/chat/completions",
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json"
+        },
+        json={
+            "model": model,
+            "messages": messages,
+            "temperature": temperature,
+            "max_tokens": max_tokens
+        },
+        timeout=90
+    )
+    if resp.status_code != 200:
+        raise RuntimeError(f"Groq error {resp.status_code}: {resp.text[:500]}")
+    data = resp.json() or {}
+    choices = data.get("choices") or []
+    if not choices:
+        raise RuntimeError("No choices returned from Groq")
+    return str(((choices[0] or {}).get("message") or {}).get("content") or "").strip()
+
+def haversine_meters(lat1, lng1, lat2, lng2):
+    r = 6371000.0
+    phi1 = math.radians(float(lat1))
+    phi2 = math.radians(float(lat2))
+    dphi = math.radians(float(lat2) - float(lat1))
+    dlambda = math.radians(float(lng2) - float(lng1))
+    a = math.sin(dphi / 2.0) ** 2 + math.cos(phi1) * math.cos(phi2) * math.sin(dlambda / 2.0) ** 2
+    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+    return r * c
+
 def is_scope_admin(scope_key, email):
     if not email:
         return False
@@ -397,6 +471,149 @@ def send_fcm_new_files(title, body, scope_key=None):
 @app_flask.route('/health', methods=['GET'])
 def health():
     return jsonify({"status": "ok", "service": "UniBot API"})
+
+@app_flask.route('/shoubra-ai', methods=['POST'])
+def shoubra_ai():
+    data = request.get_json() or {}
+    user_message = str(data.get('message', '')).strip()
+    context = str(data.get('context', '')).strip()
+    history = data.get('history') or []
+    mode = str(data.get('mode', 'chat')).strip().lower()
+    scope_key = normalize_scope_key(data.get('scopeKey'))
+
+    if not user_message:
+        return jsonify({"ok": False, "error": "message required"}), 400
+
+    quiz_triggers = ['اختبرني', 'test me', 'امتحنني', 'quiz me', 'اسألني']
+    msg_l = user_message.lower()
+    is_quiz = mode == 'quiz' or any(t in msg_l for t in quiz_triggers)
+    is_summarize = mode == 'summarize'
+
+    if is_quiz and not context:
+        return jsonify({
+            "ok": True,
+            "mode": "quiz",
+            "response": "من فضلك أرسل نص المحاضرة أو الملخص أولاً، وبعدها سأختبرك عليه مباشرة."
+        })
+
+    effective_context = context if context else build_shoubra_fallback_context(scope_key)
+    context_msg = (
+        "[LECTURE CONTEXT]\n"
+        f"{effective_context[:12000]}\n"
+        "[END CONTEXT]\n\n"
+        f"Student question: {user_message}"
+    )
+
+    messages = [{"role": "system", "content": build_shoubra_system_prompt()}]
+    if isinstance(history, list):
+        for h in history[-10:]:
+            if not isinstance(h, dict):
+                continue
+            role = str(h.get("role", "user")).strip().lower()
+            if role not in ("user", "assistant"):
+                role = "user"
+            content = str(h.get("content", "")).strip()
+            if content:
+                messages.append({"role": role, "content": content[:4000]})
+    if is_summarize:
+        messages.append({
+            "role": "user",
+            "content": "Please provide a structured Arabic summary for the lecture context with key points and quick revision bullets.\n\n" + context_msg
+        })
+    elif is_quiz:
+        messages.append({
+            "role": "user",
+            "content": "Generate 5-10 questions from the context as numbered list, varied difficulty (easy/medium/hard), MCQ or short-answer.\n\n" + context_msg
+        })
+    else:
+        messages.append({"role": "user", "content": context_msg})
+
+    try:
+        ai_text = call_groq_chat(
+            messages=messages,
+            temperature=0.7 if is_quiz else 0.4,
+            max_tokens=2200
+        )
+        return jsonify({
+            "ok": True,
+            "mode": "quiz" if is_quiz else ("summarize" if is_summarize else "chat"),
+            "response": ai_text
+        })
+    except Exception as e:
+        print(f"shoubra-ai error: {e}")
+        return jsonify({"ok": False, "error": "ai request failed"}), 500
+
+@app_flask.route('/chat', methods=['POST'])
+def legacy_chat_endpoint():
+    data = request.get_json() or {}
+    msgs = data.get('messages') or []
+    system_prompt = str(data.get('system', '')).strip()
+    scope_key = normalize_scope_key(data.get('scopeKey'))
+    text_message = ''
+    hist = []
+    for m in msgs[-10:]:
+        if not isinstance(m, dict):
+            continue
+        role = 'assistant' if str(m.get('role', 'user')).strip() == 'assistant' else 'user'
+        content = m.get('content', '')
+        if isinstance(content, list):
+            text_parts = [str(p.get('text', '')).strip() for p in content if isinstance(p, dict) and p.get('type') == 'text']
+            content = ' '.join([t for t in text_parts if t])
+        content = str(content).strip()
+        if not content:
+            continue
+        hist.append({"role": role, "content": content})
+        if role == 'user':
+            text_message = content
+    if not text_message:
+        text_message = "Hello"
+    return shoubra_ai_fallback_call(text_message, hist, system_prompt, scope_key)
+
+def shoubra_ai_fallback_call(message, history, system_prompt, scope_key):
+    try:
+        messages = []
+        if system_prompt:
+            messages.append({"role": "system", "content": system_prompt[:3000]})
+        messages.extend(history[-10:])
+        if not any(m.get("role") == "user" and m.get("content") == message for m in messages):
+            messages.append({"role": "user", "content": message})
+        ai_text = call_groq_chat(messages=messages, temperature=0.4, max_tokens=1800)
+        return jsonify({"reply": ai_text, "ok": True})
+    except Exception as e:
+        print(f"legacy /chat error: {e}")
+        return jsonify({"reply": "AI unavailable right now.", "ok": False}), 500
+
+@app_flask.route('/transcribe', methods=['POST'])
+def transcribe_audio():
+    if 'audio' not in request.files:
+        return jsonify({"ok": False, "error": "No audio file"}), 400
+    api_key = os.environ.get("GROQ_API_KEY", "").strip()
+    if not api_key:
+        return jsonify({"ok": False, "error": "GROQ_API_KEY missing"}), 500
+
+    audio_file = request.files['audio']
+    language = str(request.form.get('language', 'ar')).strip() or 'ar'
+    filename = audio_file.filename or "lecture_audio.webm"
+    mimetype = audio_file.mimetype or "audio/webm"
+    try:
+        response = req.post(
+            "https://api.groq.com/openai/v1/audio/transcriptions",
+            headers={"Authorization": f"Bearer {api_key}"},
+            files={"file": (filename, audio_file.read(), mimetype)},
+            data={
+                "model": "whisper-large-v3",
+                "language": language,
+                "response_format": "text"
+            },
+            timeout=180
+        )
+        if response.status_code == 200:
+            transcript = response.text.strip()
+            return jsonify({"ok": True, "transcript": transcript})
+        return jsonify({"ok": False, "error": "Transcription failed", "detail": response.text[:600]}), 500
+    except Exception as e:
+        print(f"transcribe error: {e}")
+        return jsonify({"ok": False, "error": "Transcription request failed"}), 500
 
 @app_flask.route('/chat/config', methods=['GET'])
 def chat_config():
@@ -703,6 +920,101 @@ def send_notification():
         return jsonify({"error": "title and body required"}), 400
     success, failure = send_fcm_all(title, body, scope_key=scope_key)
     return jsonify({"success": success, "failure": failure})
+
+@app_flask.route('/attendance/submit-token', methods=['POST'])
+def attendance_submit_token():
+    data = request.get_json() or {}
+    scope_key = normalize_scope_key(data.get('scopeKey'))
+    session_id = str(data.get('sessionId', '')).strip()
+    student_id = str(data.get('studentId', '')).strip()
+    token = str(data.get('token', '')).strip()
+    id_token = str(data.get('idToken', '')).strip()
+    lat = data.get('lat', None)
+    lng = data.get('lng', None)
+
+    decoded = verify_firebase_id_token(id_token)
+    uid = str((decoded or {}).get('uid', '')).strip()
+    if not uid:
+        return jsonify({"ok": False, "errorCode": "unauthorized"}), 401
+    if not session_id or not student_id or not token:
+        return jsonify({"ok": False, "errorCode": "invalid_payload"}), 400
+
+    scope_base = scoped_db_base(scope_key)
+    session_url = f"{scope_base}/attendanceSessions/{quote(scope_key, safe='')}/{quote(session_id, safe='')}.json"
+
+    try:
+        s_resp = requests.get(session_url, timeout=10)
+        if s_resp.status_code != 200:
+            return jsonify({"ok": False, "errorCode": "session_not_found"}), 404
+        session = s_resp.json() or {}
+        now_ms = int(time.time() * 1000)
+        if not session or not session.get('active', False) or int(session.get('expiresAt', 0)) <= now_ms:
+            return jsonify({"ok": False, "errorCode": "session_inactive"}), 400
+
+        token_issued_at = int(session.get('tokenIssuedAt', 0) or 0)
+        token_duration = int(session.get('tokenDuration', 15) or 15)
+        if token != str(session.get('currentToken', '')):
+            return jsonify({"ok": False, "errorCode": "token_mismatch"}), 400
+        if token_issued_at <= 0 or (now_ms - token_issued_at) > token_duration * 1000:
+            return jsonify({"ok": False, "errorCode": "token_expired"}), 400
+
+        submitted = session.get('submittedUids') or {}
+        if uid in submitted:
+            return jsonify({"ok": False, "errorCode": "uid_already_submitted"}), 400
+
+        students_url = f"{scope_base}/attendanceStudents.json"
+        students_resp = requests.get(students_url, timeout=10)
+        students = students_resp.json() or {}
+        student_profile = None
+        for _, v in (students or {}).items():
+            if not isinstance(v, dict):
+                continue
+            num = str(v.get('number') or v.get('studentNo') or '').strip()
+            if num == student_id:
+                student_profile = v
+                break
+        if not student_profile:
+            return jsonify({"ok": False, "errorCode": "student_not_registered"}), 400
+
+        geofence = session.get('geofence') or {}
+        gf_lat = geofence.get('lat', None)
+        gf_lng = geofence.get('lng', None)
+        gf_radius = float(geofence.get('radiusMeters', 200) or 200)
+        if gf_lat is not None and gf_lng is not None:
+            if lat is None or lng is None:
+                return jsonify({"ok": False, "errorCode": "geofence_outside"}), 400
+            distance_m = haversine_meters(float(lat), float(lng), float(gf_lat), float(gf_lng))
+            if distance_m > gf_radius:
+                return jsonify({"ok": False, "errorCode": "geofence_outside"}), 400
+
+        lecture_path = "attendanceRecords/{}/{}/{}/{}".format(
+            quote(str(session.get('lectureType') == 'section' and 'sections' or 'lectures'), safe=''),
+            quote(str(session.get('sectionKey') or 'all'), safe=''),
+            quote(str(session.get('subjectKey') or ''), safe=''),
+            quote(str(session.get('lectureId') or ''), safe='')
+        )
+        updates = {
+            f"{lecture_path}/{quote(student_id, safe='')}": {
+                "studentId": student_id,
+                "name": str(student_profile.get('name') or student_profile.get('code') or student_profile.get('studentCode') or student_id),
+                "present": True,
+                "markedAt": now_ms,
+                "method": "token",
+                "sessionId": session_id,
+                "markedBy": uid
+            },
+            f"attendanceSessions/{quote(scope_key, safe='')}/{quote(session_id, safe='')}/submittedUids/{quote(uid, safe='')}": student_id
+        }
+        patch_resp = requests.patch(f"{scope_base}/.json", json=updates, timeout=10)
+        if patch_resp.status_code not in (200, 204):
+            return jsonify({"ok": False, "errorCode": "write_failed"}), 500
+
+        return jsonify({"ok": True, "method": "token", "sessionId": session_id})
+    except requests.RequestException:
+        return jsonify({"ok": False, "errorCode": "network_error"}), 503
+    except Exception as e:
+        print(f"attendance submit error: {e}")
+        return jsonify({"ok": False, "errorCode": "server_error"}), 500
 
 # --- Helper: get or create folder by name inside a parent ---
 def get_or_create_folder(service, name, parent_id):
