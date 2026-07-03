@@ -820,7 +820,11 @@ def transcribe_audio():
             "https://api.groq.com/openai/v1/audio/transcriptions",
             headers={"Authorization": f"Bearer {GROQ_API_KEY}"},
             files={"file": (audio_file.filename or "audio.webm", audio_file.stream, audio_file.mimetype or "audio/webm")},
-            data={"model": GROQ_TRANSCRIBE_MODEL, "response_format": "json"},
+            data={
+                "model": GROQ_TRANSCRIBE_MODEL,
+                "response_format": "json",
+                "prompt": "تسجيل محاضرة جامعية، الكلام ممكن يكون عربي أو إنجليزي أو عربي مع مصطلحات إنجليزية زي: السلام عليكم ورحمة الله وبركاته، المحاضرة النهاردة هنتكلم عن، هندسة ميكانيكية، Torque, Stress, Velocity."
+            },
             timeout=60
         )
         data = resp.json()
