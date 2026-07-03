@@ -801,6 +801,117 @@ def upload_file():
         return jsonify({"error": str(e)}), 500
 
 # ==========================================
+# 8.5 Voice Notes: Transcribe + Summarize + Shoubra AI Chat (Groq)
+# ==========================================
+GROQ_API_KEY = os.environ.get('GROQ_API_KEY', '')
+GROQ_TRANSCRIBE_MODEL = "whisper-large-v3-turbo"
+GROQ_CHAT_MODEL = "llama-3.3-70b-versatile"
+
+@app_flask.route('/transcribe', methods=['POST'])
+def transcribe_audio():
+    if not GROQ_API_KEY:
+        return jsonify({"error": {"message": "GROQ_API_KEY غير مضبوط على السيرفر"}}), 500
+    if 'file' not in request.files:
+        return jsonify({"error": {"message": "لا يوجد ملف صوتي"}}), 400
+    audio_file = request.files['file']
+    try:
+        import requests
+        resp = requests.post(
+            "https://api.groq.com/openai/v1/audio/transcriptions",
+            headers={"Authorization": f"Bearer {GROQ_API_KEY}"},
+            files={"file": (audio_file.filename or "audio.webm", audio_file.stream, audio_file.mimetype or "audio/webm")},
+            data={"model": GROQ_TRANSCRIBE_MODEL, "response_format": "json"},
+            timeout=60
+        )
+        data = resp.json()
+        if resp.status_code != 200:
+            print(f"❌ Transcribe Error: {data}")
+            return jsonify({"error": {"message": data.get("error", {}).get("message", "فشل التفريغ")}}), 500
+        return jsonify({"text": data.get("text", "")})
+    except Exception as e:
+        print(f"❌ Transcribe Exception: {e}")
+        return jsonify({"error": {"message": str(e)}}), 500
+
+
+@app_flask.route('/summarize', methods=['POST'])
+def summarize_text():
+    if not GROQ_API_KEY:
+        return jsonify({"error": "GROQ_API_KEY غير مضبوط على السيرفر"}), 500
+    body = request.get_json(force=True, silent=True) or {}
+    text = (body.get('text') or '').strip()
+    if not text:
+        return jsonify({"error": "لا يوجد نص للتلخيص"}), 400
+    try:
+        import requests
+        resp = requests.post(
+            "https://api.groq.com/openai/v1/chat/completions",
+            headers={"Authorization": f"Bearer {GROQ_API_KEY}", "Content-Type": "application/json"},
+            json={
+                "model": GROQ_CHAT_MODEL,
+                "messages": [
+                    {"role": "system", "content": "لخص النص التالي بالعربية في نقاط قصيرة وواضحة، من غير أي مقدمات."},
+                    {"role": "user", "content": text}
+                ],
+                "temperature": 0.3
+            },
+            timeout=60
+        )
+        data = resp.json()
+        if resp.status_code != 200:
+            print(f"❌ Summarize Error: {data}")
+            return jsonify({"error": "فشل التلخيص"}), 500
+        summary = data["choices"][0]["message"]["content"]
+        return jsonify({"summary": summary})
+    except Exception as e:
+        print(f"❌ Summarize Exception: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app_flask.route('/chat', methods=['POST'])
+def sai_chat():
+    if not GROQ_API_KEY:
+        return jsonify({"reply": "عذرًا، مفتاح GROQ مش مضبوط على السيرفر."})
+    body = request.get_json(force=True, silent=True) or {}
+    system_msg = body.get('system', '')
+    messages_in = body.get('messages', [])
+    try:
+        import requests
+        groq_messages = []
+        if system_msg:
+            groq_messages.append({"role": "system", "content": system_msg})
+        for m in messages_in:
+            role = m.get('role', 'user')
+            content = m.get('content', '')
+            if isinstance(content, list):
+                parts = []
+                for part in content:
+                    ptype = part.get('type')
+                    if ptype == 'text':
+                        parts.append(part.get('text', ''))
+                    elif ptype == 'image':
+                        parts.append('[مرفق صورة من المستخدم - غير مدعوم حاليًا]')
+                    elif ptype == 'document':
+                        parts.append('[مرفق ملف PDF من المستخدم - غير مدعوم حاليًا]')
+                content = '\n'.join(parts)
+            groq_messages.append({"role": role, "content": content})
+
+        resp = requests.post(
+            "https://api.groq.com/openai/v1/chat/completions",
+            headers={"Authorization": f"Bearer {GROQ_API_KEY}", "Content-Type": "application/json"},
+            json={"model": GROQ_CHAT_MODEL, "messages": groq_messages, "temperature": 0.5},
+            timeout=60
+        )
+        data = resp.json()
+        if resp.status_code != 200:
+            print(f"❌ Chat Error: {data}")
+            return jsonify({"reply": "حصل خطأ في الاتصال بالمساعد الذكي."})
+        reply = data["choices"][0]["message"]["content"]
+        return jsonify({"reply": reply})
+    except Exception as e:
+        print(f"❌ Chat Exception: {e}")
+        return jsonify({"reply": "حصل خطأ غير متوقع."})
+
+# ==========================================
 # 9. Background Schedulers
 # ==========================================
 
