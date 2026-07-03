@@ -37,9 +37,9 @@ DRIVE_FOLDER_ID = "1T0MwUb-dc3UN3hMjrio1GVT6lm1mQl4Q"
 # Google Drive OAuth credentials (from bot.py)
 CLIENT_ID     = '1006485502608-ok2u5i6nt6js64djqluithivsko4mnom.apps.googleusercontent.com'
 CLIENT_SECRET = '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'
-REFRESH_TOKEN = '1//039Cmfa1v79-fCgYIARAAGAMSNwF-L9Ir6hht_3ZjQ_t7WT2a4fzlZwSRCkUlJuahHitaBBewzyKIILYZtj1Ut03XqRm15iUXUlA'
+REFRESH_TOKEN = '1//092ddShUgdAF7CgYIARAAGAkSNwF-L9IrK3hBfK6xWAkjfYWHZC-xq_-7cJAbPv2y1okRIVxjZyULEiQLukjiK1YFHDbYLgPZYpI'
 
-RAILWAY_URL = "https://web-production-ae004.up.railway.app"
+RAILWAY_URL = "https://web-production-f5fa0.up.railway.app"
 
 # ==========================================
 # 2. Firebase init
