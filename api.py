@@ -805,7 +805,7 @@ def upload_file():
 # ==========================================
 GROQ_API_KEY = os.environ.get('GROQ_API_KEY', '')
 GROQ_TRANSCRIBE_MODEL = "whisper-large-v3-turbo"
-GROQ_CHAT_MODEL = "llama-3.3-70b-versatile"
+GROQ_CHAT_MODEL = "openai/gpt-oss-120b"
 
 @app_flask.route('/transcribe', methods=['POST'])
 def transcribe_audio():
